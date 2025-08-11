@@ -1,3 +1,9 @@
 .venv/
 langchain_app/chains/__pycache__/
-langchain_app/utils/__pycache__
+langchain_app/utils/__pycache__/
+django_app/storysmith/__pycache__/
+django_app/db.sqlite3
+django_app/storysmith.log
+django_app/media/
+django_app/main/__pycache__/
+django_app/main/migrations/
