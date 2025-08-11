@@ -1,0 +1,159 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Your Story - StorySmith AI{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <!-- Header Card -->
+        <div class="card mb-4">
+            <div class="card-header text-center">
+                <h2 class="mb-0">🎭 Your Generated Story</h2>
+                <p class="mb-0 mt-2 opacity-75">Here's your personalized story created by AI</p>
+            </div>
+        </div>
+
+        <!-- Original Input Display -->
+        <div class="card mb-4 result-card">
+            <div class="card-body">
+                <h5 class="card-title">📝 Your Original Prompt</h5>
+                <div class="alert alert-light border">
+                    <strong>Text Prompt:</strong> {{ text_prompt }}
+                </div>
+                {% if audio_filename %}
+                <div class="alert alert-info border">
+                    <strong>Audio File:</strong> {{ audio_filename }}
+                    <small class="text-muted d-block">Audio was received and will be processed for future integration</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Generated Story Section -->
+        <div class="row">
+            <!-- Story Text -->
+            <div class="col-lg-6 mb-4">
+                <div class="card result-card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">📚 Generated Story</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="placeholder-content">
+                            {{ story_text }}
+                        </div>
+                        <small class="text-muted">
+                            <em>Story generation will be integrated with LangChain in the next phase</em>
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Character Description -->
+            <div class="col-lg-6 mb-4">
+                <div class="card result-card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">👥 Character Description</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="placeholder-content">
+                            {{ character_description }}
+                        </div>
+                        <small class="text-muted">
+                            <em>Character generation will be integrated with LangChain in the next phase</em>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scene Image Section -->
+        <div class="card mb-4 result-card">
+            <div class="card-header">
+                <h5 class="mb-0">🎨 Scene Visualization</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if scene_image_url %}
+                    <img src="{{ scene_image_url }}" alt="Generated Scene" class="img-fluid rounded">
+                {% else %}
+                    <div class="placeholder-content">
+                        <h4>🖼️ Scene Image Coming Soon</h4>
+                        <p>The AI-generated scene image will appear here once image generation is integrated.</p>
+                        <p>This will show a beautiful visual representation of your story scene.</p>
+                    </div>
+                {% endif %}
+                <small class="text-muted d-block mt-3">
+                    <em>Image generation will be integrated with Stable Diffusion in the next phase</em>
+                </small>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="text-center mb-4">
+            <a href="{% url 'home' %}" class="btn btn-primary btn-lg me-3">
+                ✨ Create Another Story
+            </a>
+        </div>
+
+        <!-- Development Status -->
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6 class="card-title text-warning">🚧 Development Status</h6>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="alert alert-success">
+                            <strong>✅ Completed:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>Django Frontend</li>
+                                <li>Form Handling</li>
+                                <li>Audio Upload</li>
+                                <li>File Management</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-warning">
+                            <strong>🔄 In Progress:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>LangChain Integration</li>
+                                <li>Audio to Text Conversion</li>
+                                <li>Story Generation</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-info">
+                            <strong>📋 Planned:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>Image Generation</li>
+                                <li>Advanced Styling</li>
+                                <li>Export Options</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        .navbar, .card-header, .btn, .alert-warning, .alert-info, footer {
+            display: none !important;
+        }
+        
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+        }
+        
+        .placeholder-content {
+            background: none !important;
+            animation: none !important;
+            color: black !important;
+        }
+    }
+</style>
+{% endblock %}

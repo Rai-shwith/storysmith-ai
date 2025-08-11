@@ -1,0 +1,227 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Create Your Story - StorySmith AI{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+        <div class="card">
+            <div class="card-header text-center">
+                <h2 class="mb-0">🎭 Create Your Story</h2>
+                <p class="mb-0 mt-2 opacity-75">Tell us your idea and we'll craft an amazing story for you!</p>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" enctype="multipart/form-data" id="storyForm">
+                    {% csrf_token %}
+                    
+                    <!-- Text Prompt Section -->
+                    <div class="mb-4">
+                        <label for="{{ form.text_prompt.id_for_label }}" class="form-label">
+                            <strong>{{ form.text_prompt.label }}</strong>
+                            <span class="text-danger">*</span>
+                        </label>
+                        {{ form.text_prompt }}
+                        <div class="character-counter" id="charCounter">
+                            <span id="charCount">0</span>/300 characters
+                        </div>
+                        {% if form.text_prompt.help_text %}
+                            <div class="form-text">{{ form.text_prompt.help_text }}</div>
+                        {% endif %}
+                        {% if form.text_prompt.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.text_prompt.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Audio Upload Section -->
+                    <div class="mb-4">
+                        <label for="{{ form.audio_file.id_for_label }}" class="form-label">
+                            <strong>{{ form.audio_file.label }}</strong>
+                        </label>
+                        
+                        <!-- Audio Input Options -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-secondary">
+                                    <div class="card-body text-center">
+                                        <h6 class="card-title">📁 Upload Audio File</h6>
+                                        {{ form.audio_file }}
+                                        {% if form.audio_file.help_text %}
+                                            <small class="form-text text-muted d-block mt-2">{{ form.audio_file.help_text }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-secondary">
+                                    <div class="card-body text-center">
+                                        <h6 class="card-title">🎙️ Record Audio</h6>
+                                        <button type="button" class="btn btn-secondary" id="recordBtn">
+                                            <span id="recordText">Start Recording</span>
+                                        </button>
+                                        <div class="recording-indicator mt-2" id="recordingIndicator">
+                                            🔴 Recording in progress...
+                                        </div>
+                                        <div id="recordingStatus" class="mt-2 small text-muted"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if form.audio_file.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.audio_file.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                            ✨ Generate My Story
+                        </button>
+                        <div class="mt-2">
+                            <small class="text-muted">This may take a few moments to process...</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Instructions Card -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">📝 How it works:</h5>
+                <ol class="mb-0">
+                    <li><strong>Write your prompt:</strong> Describe the story you want (required)</li>
+                    <li><strong>Add audio (optional):</strong> Upload a file or record your voice</li>
+                    <li><strong>Generate:</strong> Our AI will create your story, characters, and scene</li>
+                    <li><strong>Enjoy:</strong> View your personalized story with beautiful visuals</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Character counter for text prompt
+    const textPrompt = document.getElementById('text_prompt');
+    const charCount = document.getElementById('charCount');
+    const charCounter = document.getElementById('charCounter');
+    
+    function updateCharCounter() {
+        const count = textPrompt.value.length;
+        charCount.textContent = count;
+        
+        // Update styling based on character count
+        charCounter.classList.remove('warning', 'danger');
+        if (count > 250) {
+            charCounter.classList.add('danger');
+        } else if (count > 200) {
+            charCounter.classList.add('warning');
+        }
+    }
+    
+    textPrompt.addEventListener('input', updateCharCounter);
+    updateCharCounter(); // Initial count
+    
+    // Audio recording functionality
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+    
+    const recordBtn = document.getElementById('recordBtn');
+    const recordText = document.getElementById('recordText');
+    const recordingIndicator = document.getElementById('recordingIndicator');
+    const recordingStatus = document.getElementById('recordingStatus');
+    const audioFileInput = document.getElementById('audio_file');
+    
+    recordBtn.addEventListener('click', function() {
+        if (!isRecording) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    });
+    
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = function(event) {
+                audioChunks.push(event.data);
+            };
+            
+            mediaRecorder.onstop = function() {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioFile = new File([audioBlob], 'recorded_audio.wav', { type: 'audio/wav' });
+                
+                // Create a new FileList with the recorded file
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(audioFile);
+                audioFileInput.files = dataTransfer.files;
+                
+                recordingStatus.textContent = 'Recording saved! Ready to submit.';
+                recordingStatus.style.color = '#28a745';
+            };
+            
+            mediaRecorder.start();
+            isRecording = true;
+            
+            recordText.textContent = 'Stop Recording';
+            recordBtn.classList.remove('btn-secondary');
+            recordBtn.classList.add('btn-danger');
+            recordingIndicator.style.display = 'block';
+            recordingStatus.textContent = '';
+            
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            recordingStatus.textContent = 'Error: Could not access microphone';
+            recordingStatus.style.color = '#dc3545';
+        }
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            isRecording = false;
+            
+            recordText.textContent = 'Start Recording';
+            recordBtn.classList.remove('btn-danger');
+            recordBtn.classList.add('btn-secondary');
+            recordingIndicator.style.display = 'none';
+        }
+    }
+    
+    // Form submission handling
+    const form = document.getElementById('storyForm');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    form.addEventListener('submit', function(event) {
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating Story...';
+        
+        // Validate form
+        if (!textPrompt.value.trim()) {
+            event.preventDefault();
+            alert('Please enter a text prompt for your story.');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '✨ Generate My Story';
+        }
+    });
+});
+</script>
+{% endblock %}
