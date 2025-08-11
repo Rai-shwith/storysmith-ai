@@ -1,1 +1,3 @@
 .venv/
+langchain_app/chains/__pycache__/
+langchain_app/utils/__pycache__
