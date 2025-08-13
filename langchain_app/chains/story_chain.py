@@ -178,3 +178,28 @@ def generate_story_bundle(user_prompt: str):
         "character": enforce_png_format(clean_repetitive_text(extract_clean_response(character_text.strip()))),
         "background": clean_repetitive_text(extract_clean_response(background_text.strip()))
     }
+
+def generate_story_bundle_with_images(user_prompt: str, generate_images: bool = True, 
+                                    save_directory: str = "/content/drive/MyDrive/storysmith_images/"):
+    """Generate complete story bundle with optional image generation."""
+    # Generate text content first
+    print("=== GENERATING STORY CONTENT ===")
+    story_bundle = generate_story_bundle(user_prompt)
+    
+    print("\n=== STORY GENERATED ===")
+    print("Story:", story_bundle["story"][:100] + "...")
+    print("Character prompt:", story_bundle["character"])
+    print("Background prompt:", story_bundle["background"])
+    
+    if generate_images:
+        try:
+            from .image_prompt_chain import generate_story_images
+            print("\n=== STARTING IMAGE GENERATION ===")
+            image_results = generate_story_images(story_bundle, save_directory)
+            story_bundle.update(image_results)
+            print("✅ Images generated successfully!")
+        except Exception as e:
+            print(f"❌ Image generation failed: {e}")
+            print("Continuing with text-only results...")
+    
+    return story_bundle
