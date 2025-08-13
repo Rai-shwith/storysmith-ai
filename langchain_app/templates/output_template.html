@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StorySmith AI - Story Result</title>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .topic {
+            font-size: 1.2em;
+            margin-top: 10px;
+            opacity: 0.9;
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .story-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            grid-column: 1 / -1;
+        }
+        
+        .description-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .image-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            grid-column: 1 / -1;
+        }
+        
+        .section-title {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .story-text {
+            font-size: 1.1em;
+            line-height: 1.8;
+            text-align: justify;
+            margin-bottom: 20px;
+            color: #444;
+        }
+        
+        .description-text {
+            font-size: 1em;
+            line-height: 1.6;
+            color: #555;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .final-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            margin: 20px 0;
+        }
+        
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f1f3f4;
+            border-radius: 10px;
+        }
+        
+        .metadata-item {
+            text-align: center;
+        }
+        
+        .metadata-label {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metadata-value {
+            font-size: 1.1em;
+            color: #333;
+            margin-top: 5px;
+        }
+        
+        .icon {
+            font-size: 1.2em;
+        }
+        
+        @media (max-width: 768px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .story-section,
+            .image-section {
+                grid-column: 1;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .metadata {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .prompt-details {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .prompt-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 StorySmith AI</h1>
+        <div class="topic">{{ topic }}</div>
+    </div>
+    
+    <div class="content-grid">
+        <div class="story-section">
+            <h2 class="section-title">
+                <span class="icon">📖</span>
+                Your Story
+            </h2>
+            <div class="story-text">{{ story }}</div>
+        </div>
+        
+        <div class="description-section">
+            <h2 class="section-title">
+                <span class="icon">🎭</span>
+                Character
+            </h2>
+            <div class="description-text">{{ character_description }}</div>
+            
+            <div class="prompt-details">
+                <div class="prompt-title">Image Prompt:</div>
+                <div>{{ character_prompt }}</div>
+            </div>
+        </div>
+        
+        <div class="description-section">
+            <h2 class="section-title">
+                <span class="icon">🌄</span>
+                Setting
+            </h2>
+            <div class="description-text">{{ background_description }}</div>
+            
+            <div class="prompt-details">
+                <div class="prompt-title">Image Prompt:</div>
+                <div>{{ background_prompt }}</div>
+            </div>
+        </div>
+        
+        <div class="image-section">
+            <h2 class="section-title">
+                <span class="icon">🖼️</span>
+                Story Visualization
+            </h2>
+            <img src="{{ final_image_path }}" alt="Story Visualization" class="final-image">
+            
+            <div class="metadata">
+                <div class="metadata-item">
+                    <div class="metadata-label">Style</div>
+                    <div class="metadata-value">{{ detected_style }}</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Generated</div>
+                    <div class="metadata-value">{{ timestamp }}</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Model</div>
+                    <div class="metadata-value">Hugging Face API</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Core dependencies for StorySmith AI LangChain application
+
+# LangChain - ULTRA LIGHTWEIGHT CORE ONLY
+langchain==0.2.1
+langchain-core==0.2.3
+
+# Direct API calls (no deprecated endpoints)
+requests==2.31.0
+
+# Image processing
+Pillow==10.2.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# For improved error handling and logging
+colorama==0.4.6  # For colored terminal output
+
+# Optional: For local model support (uncomment when needed)
+# transformers==4.36.0
+# torch==2.1.0
+# diffusers==0.25.0
+# accelerate==0.25.0
