@@ -7,3 +7,4 @@ django_app/storysmith.log
 django_app/media/
 django_app/main/__pycache__/
 django_app/main/migrations/
+langchain_app/storysmith.log
