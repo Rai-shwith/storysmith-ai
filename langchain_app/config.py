@@ -13,14 +13,15 @@ load_dotenv()
 HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
 
-# Model Configuration - Using models available on HuggingFace Inference API
-# Using GPT-2 as it's always available and works with text generation API
-TEXT_GENERATION_MODEL = "gpt2"  # Always available, reliable for text generation
-IMAGE_GENERATION_MODEL = "runwayml/stable-diffusion-v1-5"  # Can switch to local model
+# Model Configuration - Using local models for text generation
+# Using Phi-3-mini for high-quality text generation
+TEXT_GENERATION_MODEL = "microsoft/Phi-3-mini-4k-instruct"  # Primary model for local execution
+IMAGE_GENERATION_MODEL = "stabilityai/sdxl-base-1.0"  # High-quality SDXL for local execution
 
-# Alternative text models (verified to work with HF Inference API for text generation)
+# Alternative text models (fallback options for local execution)
 ALTERNATIVE_TEXT_MODELS = [
-    "gpt2",                         # Classic GPT-2 (always available as fallback)
+    "microsoft/Phi-3-mini-4k-instruct",  # Primary choice - excellent for instruction following
+    "gpt2",                         # Classic GPT-2 (lightweight fallback)
     "gpt2-medium",                  # Larger GPT-2 version
     "distilgpt2",                   # Smaller, faster version of GPT-2
     "microsoft/DialoGPT-medium",    # Conversational, good for stories
@@ -29,17 +30,18 @@ ALTERNATIVE_TEXT_MODELS = [
 ]
 
 ALTERNATIVE_IMAGE_MODELS = [
+    "stabilityai/sdxl-base-1.0",        # Primary choice - highest quality
     "stabilityai/stable-diffusion-2-1",
     "CompVis/stable-diffusion-v1-4",
     "runwayml/stable-diffusion-v1-5"
 ]
 
-# Local Model Paths (for GPU usage)
+# Local Model Paths (for local execution)
 LOCAL_MODEL_PATH = os.getenv("LOCAL_MODEL_PATH", "./models")
-USE_LOCAL_MODELS = os.getenv("USE_LOCAL_MODELS", "false").lower() == "true"
+USE_LOCAL_MODELS = os.getenv("USE_LOCAL_MODELS", "true").lower() == "true"  # Default to local execution
 
 # Image Configuration
-IMAGE_SIZE = (512, 512)  # Default image size
+IMAGE_SIZE = (1024, 1024)  # SDXL native resolution for best quality
 CHARACTER_POSITION = "center"  # Position for character placement
 BACKGROUND_REMOVE_THRESHOLD = 240  # White background removal threshold (0-255)
 
@@ -52,11 +54,13 @@ API_TIMEOUT = 60  # seconds
 MAX_RETRIES = 3
 RATE_LIMIT_WAIT = 2  # seconds between requests
 
-# Story Generation Prompts - Optimized for GPT-2 style continuation
+# Story Generation Prompts - Optimized for Phi-3-mini instruction following
 STORY_PROMPT_TEMPLATE = """
-Topic: {topic}
+<|system|>You are a creative storyteller who writes engaging and imaginative stories.<|end|>
+<|user|>Write a complete short story about: {topic}
 
-STORY: Once upon a time, in a magical place, there lived a character who would embark on an incredible adventure. The story begins when
+The story should be engaging, creative, and approximately 200-300 words. Include interesting characters, a clear beginning, middle, and end.<|end|>
+<|assistant|>
 """
 
 # Image Prompt Templates

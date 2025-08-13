@@ -31,11 +31,69 @@ from utils.error_handler import log_error, log_info, ImageProcessingError
 
 
 def generate_image_from_prompt(prompt: str, filename: str) -> str:
-    """Generate image using Hugging Face API"""
+    """Generate image using local models or Hugging Face API"""
     try:
         if USE_LOCAL_MODELS:
-            raise NotImplementedError("Local image generation not yet implemented")
+            return _generate_image_local(prompt, filename)
+        else:
+            return _generate_image_api(prompt, filename)
         
+    except Exception as e:
+        log_error(f"Error generating image {filename}", e)
+        raise ImageProcessingError(f"Image generation failed: {e}")
+
+
+def _generate_image_local(prompt: str, filename: str) -> str:
+    """Generate image using local diffusion model"""
+    try:
+        from diffusers import StableDiffusionXLPipeline
+        import torch
+        
+        print(f"🎨 Loading local image model: {IMAGE_GENERATION_MODEL}")
+        
+        # Check if CUDA is available
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {device}")
+        
+        # Load the SDXL pipeline
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            IMAGE_GENERATION_MODEL,
+            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+            use_safetensors=True,
+            variant="fp16" if device == "cuda" else None
+        )
+        
+        if device == "cuda":
+            pipe = pipe.to("cuda")
+            # Enable memory efficient attention
+            pipe.enable_attention_slicing()
+            pipe.enable_model_cpu_offload()
+        
+        # Generate image
+        image = pipe(
+            prompt=prompt,
+            width=IMAGE_SIZE[0],
+            height=IMAGE_SIZE[1],
+            num_inference_steps=30,  # Reduced for faster generation
+            guidance_scale=7.5,
+            num_images_per_prompt=1
+        ).images[0]
+        
+        # Save the image
+        image_path = os.path.join(TEMP_DIR, filename)
+        image.save(image_path)
+        
+        log_info(f"Local image saved: {image_path}")
+        return image_path
+        
+    except Exception as e:
+        log_error(f"Local image generation failed for {filename}", e)
+        raise ImageProcessingError(f"Local image generation failed: {e}")
+
+
+def _generate_image_api(prompt: str, filename: str) -> str:
+    """Generate image using Hugging Face API"""
+    try:
         if not HUGGINGFACE_API_TOKEN:
             raise Exception("HUGGINGFACE_API_TOKEN not found in environment variables")
         
@@ -97,7 +155,6 @@ def generate_image_from_prompt(prompt: str, filename: str) -> str:
         raise ImageProcessingError("Failed to generate image")
         
     except Exception as e:
-        log_error(f"Error generating image {filename}", e)
         raise ImageProcessingError(f"Image generation failed: {e}")
 
 

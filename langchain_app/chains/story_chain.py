@@ -121,10 +121,55 @@ class StoryChain(Runnable):
             raise Exception(f"API call failed: {e}")
     
     def _call_local_model(self, prompt: str) -> str:
-        """Call local model for text generation (for GPU usage)"""
-        # This will be implemented when switching to local models
-        # For now, return a placeholder
-        raise NotImplementedError("Local model implementation not yet available")
+        """Call local model for text generation using transformers pipeline"""
+        try:
+            from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+            import torch
+            
+            print(f"🔥 Loading local model: {TEXT_GENERATION_MODEL}")
+            
+            # Check if CUDA is available
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"Using device: {device}")
+            
+            # Load tokenizer and model
+            tokenizer = AutoTokenizer.from_pretrained(TEXT_GENERATION_MODEL)
+            model = AutoModelForCausalLM.from_pretrained(
+                TEXT_GENERATION_MODEL,
+                torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+                device_map="auto" if device == "cuda" else None,
+                trust_remote_code=True
+            )
+            
+            # Create text generation pipeline
+            generator = pipeline(
+                "text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                device=0 if device == "cuda" else -1,
+                return_full_text=False
+            )
+            
+            # Generate text
+            response = generator(
+                prompt,
+                max_new_tokens=400,
+                temperature=0.8,
+                top_p=0.9,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id
+            )
+            
+            # Extract generated text
+            if response and len(response) > 0:
+                generated_text = response[0]['generated_text'].strip()
+                return generated_text
+            else:
+                raise Exception("No text generated from local model")
+                
+        except Exception as e:
+            log_error(f"Local model call failed: {e}")
+            raise Exception(f"Local model call failed: {e}")
     
     def invoke(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Modern LangChain invoke method for Runnable interface"""

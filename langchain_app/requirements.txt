@@ -16,8 +16,22 @@ python-dotenv==1.0.0
 # For improved error handling and logging
 colorama==0.4.6  # For colored terminal output
 
-# Optional: For local model support (uncomment when needed)
-# transformers==4.36.0
-# torch==2.1.0
-# diffusers==0.25.0
-# accelerate==0.25.0
+# Local model support - now enabled for local execution
+transformers
+torch
+diffusers
+accelerate
+
+# Additional dependencies for local model execution
+safetensors  # For safer model loading
+tokenizers  # Required by transformers
+scipy  # For various ML operations
+numpy  # Core numerical operations (compatible with torch)
+
+# For local LLM support
+sentence-transformers  # For embeddings
+huggingface-hub  # For model downloads
+
+# Optional: For quantization and optimization
+# optimum==1.16.0  # For model optimization
+# bitsandbytes==0.41.3  # For 8-bit/4-bit quantization
