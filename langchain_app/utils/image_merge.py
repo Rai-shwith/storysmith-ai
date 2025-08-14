@@ -15,6 +15,14 @@ from io import BytesIO
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from rembg import remove
+    REMBG_AVAILABLE = True
+except ImportError:
+    REMBG_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("rembg package not available. Falling back to basic background removal.")
+
 from config import (
     HUGGINGFACE_API_TOKEN,
     HUGGINGFACE_API_URL,
@@ -162,12 +170,52 @@ def _generate_image_api(prompt: str, filename: str) -> str:
         raise ImageProcessingError(f"Image generation failed: {e}")
 
 
-def remove_white_background(image_path: str) -> Image.Image:
-    """Remove white background from character image using color-based masking"""
+def remove_background(image_path: str) -> Image.Image:
+    """Remove background from character image using AI-powered rembg or fallback to color-based masking"""
     try:
         # Open the image
         img = Image.open(image_path).convert("RGBA")
         
+        if REMBG_AVAILABLE:
+            # Use rembg for AI-powered background removal
+            logger.info("Using rembg for AI-powered background removal")
+            
+            # Convert PIL image to bytes
+            img_bytes = BytesIO()
+            img.save(img_bytes, format='PNG')
+            img_bytes.seek(0)
+            
+            # Remove background using rembg
+            output_bytes = remove(img_bytes.getvalue())
+            
+            # Convert back to PIL Image
+            result_img = Image.open(BytesIO(output_bytes)).convert("RGBA")
+            
+            log_info("Background removed successfully using rembg")
+            return result_img
+        else:
+            # Fallback to color-based background removal
+            logger.info("Using fallback color-based background removal")
+            return _remove_white_background_fallback(img)
+        
+    except Exception as e:
+        log_error(f"Error removing background from {image_path}", e)
+        # If rembg fails, try fallback method
+        if REMBG_AVAILABLE:
+            logger.warning("rembg failed, falling back to color-based removal")
+            try:
+                img = Image.open(image_path).convert("RGBA")
+                return _remove_white_background_fallback(img)
+            except Exception as fallback_error:
+                log_error(f"Fallback background removal also failed", fallback_error)
+                raise ImageProcessingError(f"Background removal failed: {e}")
+        else:
+            raise ImageProcessingError(f"Background removal failed: {e}")
+
+
+def _remove_white_background_fallback(img: Image.Image) -> Image.Image:
+    """Fallback method: Remove white background using color-based masking"""
+    try:
         # Get image data
         data = img.getdata()
         
@@ -188,12 +236,17 @@ def remove_white_background(image_path: str) -> Image.Image:
         # Update image data
         img.putdata(new_data)
         
-        log_info("White background removed successfully")
+        log_info("White background removed successfully using fallback method")
         return img
         
     except Exception as e:
-        log_error(f"Error removing background from {image_path}", e)
-        raise ImageProcessingError(f"Background removal failed: {e}")
+        raise ImageProcessingError(f"Fallback background removal failed: {e}")
+
+
+# Keep the old function name for backward compatibility
+def remove_white_background(image_path: str) -> Image.Image:
+    """Legacy function name - redirects to remove_background"""
+    return remove_background(image_path)
 
 
 def resize_character_for_background(character_img: Image.Image, background_img: Image.Image) -> Image.Image:
@@ -228,8 +281,8 @@ def merge_character_and_background(character_path: str, background_path: str, ou
         # Open background image
         background = Image.open(background_path).convert("RGBA")
         
-        # Remove white background from character and get RGBA image
-        character = remove_white_background(character_path)
+        # Remove background from character using AI-powered rembg or fallback method
+        character = remove_background(character_path)
         
         # Resize character to fit background
         character_resized = resize_character_for_background(character, background)
@@ -307,11 +360,18 @@ def create_story_visualization(character_prompt: str, background_prompt: str, st
 def test_image_generation():
     """Test function for image generation pipeline"""
     try:
-        test_character_prompt = "A brave knight in shining armor, full body shot, isolated on pure white background, png style, no background"
-        test_background_prompt = "A mystical forest at dawn, sunlight filtering through trees, magical atmosphere"
+        # Note: For best results with rembg, use prompts that generate clear subjects
+        test_character_prompt = "A brave knight in shining armor, full body shot, detailed character design, high quality"
+        test_background_prompt = "A mystical forest at dawn, sunlight filtering through trees, magical atmosphere, detailed landscape"
         
         result = create_story_visualization(test_character_prompt, test_background_prompt, "test")
         logger.info(f"Test completed successfully! Output: {result}")
+        
+        if REMBG_AVAILABLE:
+            logger.info("Test used AI-powered background removal (rembg)")
+        else:
+            logger.info("Test used fallback color-based background removal")
+            
         return result
         
     except Exception as e:
