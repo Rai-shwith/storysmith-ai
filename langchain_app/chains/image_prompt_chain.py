@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from langchain_core.runnables import Runnable
 
 from config import (
-    CHARACTER_PROMPT_TEMPLATE,
-    BACKGROUND_PROMPT_TEMPLATE,
+    CHARACTER_IMAGE_PROMPT_TEMPLATE,
+    BACKGROUND_IMAGE_PROMPT_TEMPLATE,
     STYLE_MODIFIERS
 )
 from utils.error_handler import log_error
@@ -80,7 +80,7 @@ class ImagePromptChain(Runnable):
         style_modifier = STYLE_MODIFIERS.get(style, STYLE_MODIFIERS["default"])
         
         # Add specific instructions for better character generation
-        enhanced_prompt = CHARACTER_PROMPT_TEMPLATE.format(
+        enhanced_prompt = CHARACTER_IMAGE_PROMPT_TEMPLATE.format(
             character_description=cleaned_desc,
             style_modifier=style_modifier
         )
@@ -93,7 +93,7 @@ class ImagePromptChain(Runnable):
         style_modifier = STYLE_MODIFIERS.get(style, STYLE_MODIFIERS["default"])
         
         # Add specific instructions for better background generation
-        enhanced_prompt = BACKGROUND_PROMPT_TEMPLATE.format(
+        enhanced_prompt = BACKGROUND_IMAGE_PROMPT_TEMPLATE.format(
             background_description=cleaned_desc,
             style_modifier=style_modifier
         )
@@ -105,10 +105,21 @@ class ImagePromptChain(Runnable):
         try:
             story_data = input_data.get("story_data", {})
             
-            # Extract components
+            # Debug: Print the story_data structure
+            print(f"Debug - story_data keys: {list(story_data.keys())}")
+            print(f"Debug - story_data type: {type(story_data)}")
+            
+            # Extract components with better error handling
             story = story_data.get("story", "")
             character_desc = story_data.get("character_description", "")
             background_desc = story_data.get("background_description", "")
+            
+            if not story:
+                print("Warning: No story found in story_data")
+            if not character_desc:
+                print("Warning: No character_description found in story_data")
+            if not background_desc:
+                print("Warning: No background_description found in story_data")
             
             print("Generating optimized image prompts...")
             
@@ -137,6 +148,9 @@ class ImagePromptChain(Runnable):
         except Exception as e:
             error_msg = f"Image prompt generation failed: {e}"
             log_error(error_msg)
+            # Print more debug info
+            print(f"Debug - Exception details: {e}")
+            print(f"Debug - input_data: {input_data}")
             raise Exception(error_msg)
 
 
