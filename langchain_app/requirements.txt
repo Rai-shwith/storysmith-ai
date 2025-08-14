@@ -1,8 +1,9 @@
 # Core dependencies for StorySmith AI LangChain application
 
-# LangChain - ULTRA LIGHTWEIGHT CORE ONLY
-langchain==0.2.1
-langchain-core==0.2.3
+# LangChain - Core and Community packages for local model integration
+langchain
+langchain-core
+langchain-community  # For HuggingFace integration
 
 # Direct API calls (no deprecated endpoints)
 requests==2.31.0

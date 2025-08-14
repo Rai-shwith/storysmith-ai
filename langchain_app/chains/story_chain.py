@@ -121,12 +121,13 @@ class StoryChain(Runnable):
             raise Exception(f"API call failed: {e}")
     
     def _call_local_model(self, prompt: str) -> str:
-        """Call local model for text generation using transformers pipeline"""
+        """Call local model for text generation using LangChain's HuggingFace integration"""
         try:
-            from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+            from langchain_huggingface import HuggingFacePipeline
+            from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, TextGenerationPipeline
             import torch
             
-            print(f"🔥 Loading local model: {TEXT_GENERATION_MODEL}")
+            print(f"🔥 Loading local model via LangChain: {TEXT_GENERATION_MODEL}")
             
             # Check if CUDA is available
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -134,36 +135,70 @@ class StoryChain(Runnable):
             
             # Load tokenizer and model
             tokenizer = AutoTokenizer.from_pretrained(TEXT_GENERATION_MODEL)
+            
+            # Set pad token if not set
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            
+            # Load model with compatible settings
             model = AutoModelForCausalLM.from_pretrained(
                 TEXT_GENERATION_MODEL,
                 torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-                device_map="auto" if device == "cuda" else None,
-                trust_remote_code=True
+                device_map="auto",
+                trust_remote_code=True,
+                attn_implementation="eager"  # Use eager attention
             )
             
-            # Create text generation pipeline
-            generator = pipeline(
-                "text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                device=0 if device == "cuda" else -1,
-                return_full_text=False
-            )
+            # Try using HuggingFacePipeline directly with model_id instead of pipeline
+            # This approach often bypasses cache issues
+            try:
+                llm = HuggingFacePipeline.from_model_id(
+                    model_id=TEXT_GENERATION_MODEL,
+                    task="text-generation",
+                    device_map="auto",
+                    model_kwargs={
+                        "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
+                        "trust_remote_code": True,
+                        "attn_implementation": "eager",
+                        "use_cache": False
+                    },
+                    pipeline_kwargs={
+                        "max_new_tokens": 300,
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                        "do_sample": True,
+                        "return_full_text": False
+                    }
+                )
+                
+                print("✅ Using HuggingFacePipeline.from_model_id")
+                
+            except Exception as e:
+                print(f"⚠️  from_model_id failed ({e}), trying manual pipeline...")
+                
+                # Fallback: Create pipeline manually
+                pipe = pipeline(
+                    "text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
+                    max_new_tokens=300,
+                    temperature=0.7,
+                    top_p=0.9,
+                    do_sample=True,
+                    return_full_text=False,
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=False
+                )
+                
+                # Create LangChain LLM from the pipeline
+                llm = HuggingFacePipeline(pipeline=pipe)
+                print("✅ Using manual pipeline creation")
             
-            # Generate text
-            response = generator(
-                prompt,
-                max_new_tokens=400,
-                temperature=0.8,
-                top_p=0.9,
-                do_sample=True,
-                pad_token_id=tokenizer.eos_token_id
-            )
+            # Use LangChain's invoke method
+            response = llm.invoke(prompt)
             
-            # Extract generated text
-            if response and len(response) > 0:
-                generated_text = response[0]['generated_text'].strip()
-                return generated_text
+            if response and response.strip():
+                return response.strip()
             else:
                 raise Exception("No text generated from local model")
                 

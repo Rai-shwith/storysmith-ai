@@ -13,6 +13,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def test_local_model_setup():
+
+import os
+import sys
+
+# Add parent dir            print(f"   💾 Total RAM: {memory_gb:.1f}GB")
+            print(f"   💾 Available RAM: {available_gb:.1f}GB")
+            
+            if memory_gb < 6:
+                print("   ❌ Warning: Less than 6GB RAM detected. Models may not run.")
+            elif memory_gb < 8:
+                print("   ⚠️  Warning: Less than 8GB RAM detected. Models may run slowly.")
+            elif memory_gb < 12:
+                print("   ✅ Good RAM for local model execution!")
+                if torch.cuda.is_available():
+                    print("   🎮 GPU available - SDXL will use GPU VRAM instead of system RAM!")
+            else:
+                print("   ✅ Excellent RAM for local model execution!") path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+def test_local_model_setup():
     """Test the local model setup for Phi-3-mini and SDXL"""
     
     print("🧪 Testing Local Model Setup")
@@ -158,19 +181,15 @@ def test_local_model_setup():
             memory_gb = memory.total / (1024**3)
             available_gb = memory.available / (1024**3)
             
-            print(f"   💾 Total RAM: {memory_gb:.1f}GB")
+            print(f"   � Total RAM: {memory_gb:.1f}GB")
             print(f"   💾 Available RAM: {available_gb:.1f}GB")
             
-            if memory_gb < 6:
-                print("   ❌ Warning: Less than 6GB RAM detected. Models may not run.")
-            elif memory_gb < 8:
+            if memory_gb < 8:
                 print("   ⚠️  Warning: Less than 8GB RAM detected. Models may run slowly.")
-            elif memory_gb < 12:
-                print("   ✅ Good RAM for local model execution!")
-                if torch.cuda.is_available():
-                    print("   🎮 GPU available - SDXL will use GPU VRAM instead of system RAM!")
+            elif memory_gb < 16:
+                print("   ⚠️  Warning: Less than 16GB RAM. Consider using smaller models.")
             else:
-                print("   ✅ Excellent RAM for local model execution!")
+                print("   ✅ Sufficient RAM for local model execution!")
                 
         except ImportError:
             print("   ℹ️  psutil not available, skipping memory check")
