@@ -4,6 +4,8 @@
 
 An advanced AI system that transforms simple text prompts into rich, visual storytelling experiences using cutting-edge language models and image generation technology.
 
+![StorySmith AI Interface](django_app/static/homepage.png)
+
 ## 🌟 **What is StorySmith AI?**
 
 StorySmith AI is a comprehensive platform that generates complete story visualizations from user prompts. It combines:
@@ -269,6 +271,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 1. **Start with Django**: [`cd django_app/`](./django_app/) for the web interface
 2. **Explore LangChain**: [`cd langchain_app/`](./langchain_app/) for AI implementation details  
 3. **Check Examples**: [`cd colab/`](./colab/) for Jupyter notebook demonstrations
+
+## 📋 **Development Status**
+
+### **✅ Completed Features**
+- ✅ Complete story generation pipeline with Hugging Face Transformers
+- ✅ Character and background image generation using SDXL models
+- ✅ Background removal and image composition with REMBG
+- ✅ Professional Django web interface with async processing
+- ✅ Real-time job tracking and progress updates
+- ✅ Comprehensive error handling and retry mechanisms
+
+### **🔄 Pending Features**
+- 🔄 **Audio Integration**: Voice input processing and audio-based story generation (in development)
 
 ---
 
