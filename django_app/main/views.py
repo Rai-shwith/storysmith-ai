@@ -5,13 +5,16 @@ Handles the form submission and result display for story generation.
 
 import os
 import logging
-from django.shortcuts import render, redirect
-from django.http import HttpResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.urls import reverse
 from .forms import StoryInputForm
+from .models import StoryGenerationJob
+from .langchain_integration import start_story_generation_async, get_job_status
 
 # Set up logger for this module
 logger = logging.getLogger('storysmith')
@@ -21,7 +24,7 @@ def home_view(request):
     """
     Home page view that handles both GET (display form) and POST (process form) requests.
     GET: Display the story input form
-    POST: Process form data and redirect to results
+    POST: Process form data and start async story generation
     """
     
     if request.method == 'POST':
@@ -51,14 +54,24 @@ def home_view(request):
                 logger.info(f"Audio received and saved: {audio_filename}")
                 print("Audio received")  # Console output as requested
             
-            # Store data in session for results page
-            request.session['story_data'] = {
-                'text_prompt': text_prompt,
-                'audio_filename': audio_filename,
-            }
-            
-            # Redirect to results page
-            return redirect('result')
+            try:
+                # Start async story generation
+                job = start_story_generation_async(text_prompt, audio_filename)
+                
+                # Store job_id in session
+                request.session['current_job_id'] = str(job.job_id)
+                
+                # Redirect to processing page
+                return redirect('processing', job_id=job.job_id)
+                
+            except Exception as e:
+                logger.error(f"Failed to start story generation: {e}")
+                messages.error(request, "Failed to start story generation. Please try again.")
+                # Return form with error
+                return render(request, 'main/input_form.html', {
+                    'form': form,
+                    'error': "Failed to start story generation. Please check that the LangChain app is properly configured."
+                })
         
         else:
             # Form has errors
@@ -72,31 +85,149 @@ def home_view(request):
     return render(request, 'main/input_form.html', {'form': form})
 
 
-def result_view(request):
+def processing_view(request, job_id):
     """
-    Results page view that displays placeholders for generated content.
-    Shows the original user input and placeholders for story, character, and image.
+    Processing page that shows job status and auto-refreshes
     """
+    job_status = get_job_status(job_id)
     
-    # Get story data from session
-    story_data = request.session.get('story_data')
-    
-    if not story_data:
-        # No data in session, redirect to home
-        messages.warning(request, "No story data found. Please submit a new request.")
+    if not job_status['exists']:
+        messages.error(request, "Job not found.")
         return redirect('home')
     
+    job = job_status['job']
+    
+    # Check if job is completed
+    if job.status == 'completed':
+        return redirect('result', job_id=job_id)
+    
+    context = {
+        'job': job,
+        'job_id': job_id,
+        'refresh_url': reverse('processing', kwargs={'job_id': job_id}),
+        'result_url': reverse('result', kwargs={'job_id': job_id}),
+    }
+    
+    return render(request, 'main/processing.html', context)
+
+
+def job_status_api(request, job_id):
+    """
+    API endpoint to check job status (for AJAX polling)
+    """
+    job_status = get_job_status(job_id)
+    
+    if not job_status['exists']:
+        return JsonResponse({'status': 'not_found'})
+    
+    job = job_status['job']
+    response_data = {
+        'status': job.status,
+        'created_at': job.created_at.isoformat() if job.created_at else None,
+        'started_at': job.started_at.isoformat() if job.started_at else None,
+        'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+        'error_message': job.error_message,
+    }
+    
+    if job.status == 'completed':
+        response_data['redirect_url'] = reverse('result', kwargs={'job_id': job_id})
+    
+    return JsonResponse(response_data)
+
+
+def result_view(request, job_id):
+    """
+    Results page view that displays the generated story and images
+    """
+    job_status = get_job_status(job_id)
+    
+    if not job_status['exists']:
+        messages.error(request, "Job not found.")
+        return redirect('home')
+    
+    job = job_status['job']
+    
+    if job.status != 'completed':
+        # Job not completed, redirect to processing page
+        return redirect('processing', job_id=job_id)
+    
     # Log the result page access
-    logger.info("User accessed results page")
+    logger.info(f"User accessed results for job {job_id}")
     
     # Prepare context for template
     context = {
-        'text_prompt': story_data['text_prompt'],
-        'audio_filename': story_data.get('audio_filename'),
-        # Placeholder content for now
-        'story_text': 'This is where the generated story will appear. The AI will create an engaging narrative based on your prompt.',
-        'character_description': 'Character descriptions and details will be displayed here once the AI processes your request.',
-        'scene_image_url': None,  # Will be populated when image generation is integrated
+        'job': job,
+        'text_prompt': job.text_prompt,
+        'audio_filename': job.audio_filename,
+        'story_text': job.story_text,
+        'character_description': job.character_description,
+        'background_description': job.background_description,
+        'detected_style': job.detected_style,
+        'final_image_url': job.final_image_path,
+        'character_image_url': job.character_image_path,
+        'background_image_url': job.background_image_path,
+        'retry_url': reverse('retry', kwargs={'job_id': job_id}),
     }
     
     return render(request, 'main/result.html', context)
+
+
+def retry_view(request, job_id):
+    """
+    Retry view that pre-populates the form with previous job data
+    """
+    job_status = get_job_status(job_id)
+    
+    if not job_status['exists']:
+        messages.error(request, "Original job not found.")
+        return redirect('home')
+    
+    job = job_status['job']
+    
+    if request.method == 'POST':
+        form = StoryInputForm(request.POST, request.FILES)
+        
+        if form.is_valid():
+            # Get cleaned data
+            text_prompt = form.cleaned_data['text_prompt']
+            audio_file = form.cleaned_data.get('audio_file')
+            
+            # Handle audio file if provided
+            audio_filename = None
+            if audio_file:
+                media_audio_dir = os.path.join(settings.MEDIA_ROOT, 'audio_uploads')
+                os.makedirs(media_audio_dir, exist_ok=True)
+                
+                audio_filename = default_storage.save(
+                    f'audio_uploads/{audio_file.name}',
+                    ContentFile(audio_file.read())
+                )
+            
+            try:
+                # Start new async story generation
+                new_job = start_story_generation_async(text_prompt, audio_filename)
+                
+                # Store new job_id in session
+                request.session['current_job_id'] = str(new_job.job_id)
+                
+                # Redirect to processing page for new job
+                return redirect('processing', job_id=new_job.job_id)
+                
+            except Exception as e:
+                logger.error(f"Failed to start retry story generation: {e}")
+                messages.error(request, "Failed to start story generation. Please try again.")
+    
+    else:
+        # GET request - pre-populate form with previous job data
+        initial_data = {
+            'text_prompt': job.text_prompt,
+        }
+        form = StoryInputForm(initial=initial_data)
+    
+    context = {
+        'form': form,
+        'original_job': job,
+        'is_retry': True,
+    }
+    
+    return render(request, 'main/input_form.html', context)

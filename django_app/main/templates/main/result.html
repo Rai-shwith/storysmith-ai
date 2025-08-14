@@ -10,6 +10,11 @@
             <div class="card-header text-center">
                 <h2 class="mb-0">🎭 Your Generated Story</h2>
                 <p class="mb-0 mt-2 opacity-75">Here's your personalized story created by AI</p>
+                {% if detected_style %}
+                <div class="mt-2">
+                    <span class="badge badge-info">Style: {{ detected_style|title }}</span>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -29,7 +34,7 @@
             </div>
         </div>
 
-        <!-- Generated Story Section -->
+        <!-- Generated Content Section -->
         <div class="row">
             <!-- Story Text -->
             <div class="col-lg-6 mb-4">
@@ -38,12 +43,15 @@
                         <h5 class="mb-0">📚 Generated Story</h5>
                     </div>
                     <div class="card-body">
-                        <div class="placeholder-content">
-                            {{ story_text }}
+                        {% if story_text %}
+                        <div class="story-content">
+                            {{ story_text|linebreaks }}
                         </div>
-                        <small class="text-muted">
-                            <em>Story generation will be integrated with LangChain in the next phase</em>
-                        </small>
+                        {% else %}
+                        <div class="placeholder-content">
+                            <p class="text-muted">Story content will appear here once generation is complete.</p>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -55,40 +63,96 @@
                         <h5 class="mb-0">👥 Character Description</h5>
                     </div>
                     <div class="card-body">
-                        <div class="placeholder-content">
-                            {{ character_description }}
+                        {% if character_description %}
+                        <div class="character-content">
+                            {{ character_description|linebreaks }}
                         </div>
-                        <small class="text-muted">
-                            <em>Character generation will be integrated with LangChain in the next phase</em>
-                        </small>
+                        {% else %}
+                        <div class="placeholder-content">
+                            <p class="text-muted">Character description will appear here once generation is complete.</p>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Scene Image Section -->
+        {% if background_description %}
+        <!-- Background Description Section -->
         <div class="card mb-4 result-card">
             <div class="card-header">
-                <h5 class="mb-0">🎨 Scene Visualization</h5>
+                <h5 class="mb-0">🏞️ Background Setting</h5>
             </div>
-            <div class="card-body text-center">
-                {% if scene_image_url %}
-                    <img src="{{ scene_image_url }}" alt="Generated Scene" class="img-fluid rounded">
-                {% else %}
-                    <div class="placeholder-content">
-                        <h4>🖼️ Scene Image Coming Soon</h4>
-                        <p>The AI-generated scene image will appear here once image generation is integrated.</p>
-                        <p>This will show a beautiful visual representation of your story scene.</p>
+            <div class="card-body">
+                <div class="background-content">
+                    {{ background_description|linebreaks }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Image Gallery Section -->
+        <div class="row mb-4">
+            <!-- Final Merged Image -->
+            {% if final_image_url %}
+            <div class="col-lg-12 mb-4">
+                <div class="card result-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">🎨 Complete Story Visualization</h5>
                     </div>
-                {% endif %}
-                <small class="text-muted d-block mt-3">
-                    <em>Image generation will be integrated with Stable Diffusion in the next phase</em>
-                </small>
+                    <div class="card-body text-center">
+                        <img src="{{ MEDIA_URL }}{{ final_image_url }}" alt="Complete Story Scene" class="img-fluid rounded shadow">
+                        <p class="mt-2 text-muted">Character and background merged together</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Individual Images -->
+            <div class="col-lg-6 mb-4">
+                <div class="card result-card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">👤 Character Image</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        {% if character_image_url %}
+                            <img src="{{ MEDIA_URL }}{{ character_image_url }}" alt="Generated Character" class="img-fluid rounded shadow">
+                        {% else %}
+                            <div class="placeholder-content">
+                                <h6>🎭 Character Image</h6>
+                                <p class="text-muted">The AI-generated character image will appear here.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-4">
+                <div class="card result-card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">🏞️ Background Image</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        {% if background_image_url %}
+                            <img src="{{ MEDIA_URL }}{{ background_image_url }}" alt="Generated Background" class="img-fluid rounded shadow">
+                        {% else %}
+                            <div class="placeholder-content">
+                                <h6>🖼️ Background Image</h6>
+                                <p class="text-muted">The AI-generated background image will appear here.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Action Buttons -->
         <div class="text-center mb-4">
+            {% if retry_url %}
+            <a href="{{ retry_url }}" class="btn btn-warning btn-lg me-3">
+                <i class="fas fa-redo"></i> Try Again with Changes
+            </a>
+            {% endif %}
             <a href="{% url 'home' %}" class="btn btn-primary btn-lg me-3">
                 ✨ Create Another Story
             </a>

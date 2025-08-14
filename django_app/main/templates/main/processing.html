@@ -1,0 +1,133 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Processing Story - StorySmith AI{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cog fa-spin"></i>
+                        Generating Your Story
+                    </h4>
+                </div>
+                <div class="card-body text-center">
+                    {% if job.status == 'pending' %}
+                        <div class="alert alert-info">
+                            <h5><i class="fas fa-clock"></i> Preparing...</h5>
+                            <p>Your story generation request is queued and will start shortly.</p>
+                        </div>
+                    {% elif job.status == 'processing' %}
+                        <div class="alert alert-warning">
+                            <h5><i class="fas fa-magic"></i> Creating Magic...</h5>
+                            <p>AI is crafting your story and generating beautiful visualizations.</p>
+                            <p><small>This usually takes 7-10 minutes for the complete experience.</small></p>
+                        </div>
+                    {% elif job.status == 'failed' %}
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-exclamation-triangle"></i> Generation Failed</h5>
+                            <p>{{ job.error_message|default:"An error occurred during story generation." }}</p>
+                            <div class="mt-3">
+                                <a href="{% url 'retry' job_id=job.job_id %}" class="btn btn-warning">
+                                    <i class="fas fa-redo"></i> Try Again
+                                </a>
+                                <a href="{% url 'home' %}" class="btn btn-secondary">
+                                    <i class="fas fa-home"></i> Start Over
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Progress Animation -->
+                    {% if job.status == 'pending' or job.status == 'processing' %}
+                    <div class="progress mb-3" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             role="progressbar" style="width: 60%" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100">
+                            Processing...
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Original Prompt Display -->
+                    <div class="mt-4">
+                        <h6>Your Prompt:</h6>
+                        <div class="alert alert-light border">
+                            <em>"{{ job.text_prompt }}"</em>
+                        </div>
+                    </div>
+
+                    <!-- Timeline -->
+                    <div class="mt-4">
+                        <h6>Timeline:</h6>
+                        <div class="text-left">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span class="ml-2">Request received: {{ job.created_at|date:"H:i:s" }}</span>
+                            </div>
+                            {% if job.started_at %}
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span class="ml-2">Processing started: {{ job.started_at|date:"H:i:s" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if job.completed_at %}
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span class="ml-2">Completed: {{ job.completed_at|date:"H:i:s" }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="mt-4">
+                        {% if job.status == 'pending' or job.status == 'processing' %}
+                        <button id="refreshBtn" class="btn btn-outline-primary" onclick="location.reload()">
+                            <i class="fas fa-sync-alt"></i> Refresh Status
+                        </button>
+                        {% endif %}
+                        <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-home"></i> New Story
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-refresh Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh every 30 seconds if job is still processing
+    {% if job.status == 'pending' or job.status == 'processing' %}
+    let refreshInterval = setInterval(function() {
+        // Check job status via API
+        fetch('{% url "job_status_api" job_id=job.job_id %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    // Redirect to results page
+                    window.location.href = '{% url "result" job_id=job.job_id %}';
+                } else if (data.status === 'failed') {
+                    // Reload page to show error
+                    location.reload();
+                }
+                // If still processing, continue polling
+            })
+            .catch(error => {
+                console.log('Status check failed:', error);
+                // Continue polling on error
+            });
+    }, 30000); // 30 seconds
+
+    // Also refresh page every 2 minutes as fallback
+    setTimeout(function() {
+        location.reload();
+    }, 120000); // 2 minutes
+    {% endif %}
+});
+</script>
+{% endblock %}
