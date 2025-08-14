@@ -55,6 +55,10 @@ def clean_repetitive_text(text: str) -> str:
 def enforce_png_format(text: str) -> str:
     """Ensure text ends with PNG format specification."""
     text = text.strip()
+    
+    # Remove description tags that sometimes appear
+    text = re.sub(r'</?description[^>]*>', '', text, flags=re.IGNORECASE)
+    
     if not text.lower().endswith("transparent background, png format."):
         text = re.sub(r'\.*$', '', text)  # remove trailing dots
         text += ". transparent background, PNG format"
