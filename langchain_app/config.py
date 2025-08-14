@@ -16,7 +16,7 @@ HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models"
 # Model Configuration - Using local models for text generation
 # Using Phi-3-mini for high-quality text generation
 TEXT_GENERATION_MODEL = "microsoft/Phi-3-mini-4k-instruct"  # Primary model for local execution
-IMAGE_GENERATION_MODEL = "stabilityai/sdxl-base-1.0"  # High-quality SDXL for local execution
+IMAGE_GENERATION_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"  # High-quality SDXL for local execution
 
 # Alternative text models (fallback options for local execution)
 ALTERNATIVE_TEXT_MODELS = [
@@ -30,7 +30,7 @@ ALTERNATIVE_TEXT_MODELS = [
 ]
 
 ALTERNATIVE_IMAGE_MODELS = [
-    "stabilityai/sdxl-base-1.0",        # Primary choice - highest quality
+    "stabilityai/stable-diffusion-xl-base-1.0",        # Primary choice - highest quality
     "stabilityai/stable-diffusion-2-1",
     "CompVis/stable-diffusion-v1-4",
     "runwayml/stable-diffusion-v1-5"
