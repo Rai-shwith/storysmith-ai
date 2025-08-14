@@ -1,34 +1,52 @@
 #!/usr/bin/env python3
 """
-Simple test script for SDXL image generation
+Test SDXL image generation capability
 """
 
-import torch
 import os
-from config import USE_LOCAL_MODELS, IMAGE_GENERATION_MODEL, IMAGE_SIZE, OUTPUT_DIR
+import sys
+import logging
 
-def test_image_generation():
-    """Test local SDXL image generation"""
-    print("🎨 Testing SDXL Image Generation")
-    print("=" * 40)
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    import torch
+    from diffusers import StableDiffusionXLPipeline
+except ImportError as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    log_error(f"Import error: {e}")
+    log_error("Install required packages: pip install torch diffusers")
+    sys.exit(1)
+
+from config import USE_LOCAL_MODELS, IMAGE_GENERATION_MODEL, IMAGE_SIZE, OUTPUT_DIR
+from utils.error_handler import log_info, log_error, log_warning
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
+def main():
+    logger.info("🎨 Testing SDXL Image Generation")
+    logger.info("=" * 40)
     
-    # Check CUDA
-    print(f"CUDA available: {torch.cuda.is_available()}")
+    # Check system
+    logger.info(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
-        print(f"GPU: {torch.cuda.get_device_name()}")
-        print(f"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB")
+        logger.info(f"GPU: {torch.cuda.get_device_name()}")
+        logger.info(f"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB")
     
     # Check config
-    print(f"USE_LOCAL_MODELS: {USE_LOCAL_MODELS}")
-    print(f"IMAGE_MODEL: {IMAGE_GENERATION_MODEL}")
-    print(f"IMAGE_SIZE: {IMAGE_SIZE}")
+    logger.info(f"USE_LOCAL_MODELS: {USE_LOCAL_MODELS}")
+    logger.info(f"IMAGE_MODEL: {IMAGE_GENERATION_MODEL}")
+    logger.info(f"IMAGE_SIZE: {IMAGE_SIZE}")
     
     if not USE_LOCAL_MODELS:
-        print("❌ Local models disabled. Set USE_LOCAL_MODELS=True in config")
-        return False
+        log_error("❌ Local models disabled. Set USE_LOCAL_MODELS=True in config")
+        return
     
     try:
-        print("\n🔥 Loading SDXL pipeline...")
+        logger.info("\n🔥 Loading SDXL pipeline...")
         from diffusers import StableDiffusionXLPipeline
         import os
         
@@ -36,11 +54,11 @@ def test_image_generation():
         os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"  # Use faster download client
         
         # Authentication is handled by the cached token from huggingface-cli login
-        print("🔑 Using cached HuggingFace authentication...")
+        logger.info("🔑 Using cached HuggingFace authentication...")
         
         # Load pipeline - using correct SDXL model name with better download settings
         model_name = "stabilityai/stable-diffusion-xl-base-1.0"  # Correct model name
-        print(f"Loading model: {model_name}")
+        logger.info(f"Loading model: {model_name}")
         
         # Try with better download settings
         pipe = StableDiffusionXLPipeline.from_pretrained(
@@ -58,11 +76,11 @@ def test_image_generation():
             pipe.enable_attention_slicing()
             pipe.enable_model_cpu_offload()
         
-        print("✅ SDXL pipeline loaded successfully!")
+        logger.info("✅ SDXL pipeline loaded successfully!")
         
         # Test generation
         test_prompt = "A friendly robot in a garden, digital art"
-        print(f"\n🎨 Generating test image with prompt: {test_prompt}")
+        logger.info(f"\n🎨 Generating test image with prompt: {test_prompt}")
         
         image = pipe(
             prompt=test_prompt,
@@ -76,12 +94,16 @@ def test_image_generation():
         output_path = os.path.join(OUTPUT_DIR, "test_robot.png")
         image.save(output_path)
         
-        print(f"✅ Test image generated: {output_path}")
+        logger.info(f"✅ Test image generated: {output_path}")
         return True
         
     except Exception as e:
-        print(f"❌ Image generation failed: {e}")
+        log_error(f"❌ Image generation failed: {e}")
         return False
+
+def test_image_generation():
+    """Function to test image generation"""
+    return main()
 
 if __name__ == "__main__":
     test_image_generation()

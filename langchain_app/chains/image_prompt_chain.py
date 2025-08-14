@@ -5,6 +5,7 @@ Image Prompt Chain - Converts story descriptions to optimized image generation p
 import os
 import sys
 import re
+import logging
 from typing import Dict, Any, List
 
 # Add parent directory to path for imports
@@ -18,7 +19,10 @@ from config import (
     BACKGROUND_IMAGE_PROMPT_TEMPLATE,
     STYLE_MODIFIERS
 )
-from utils.error_handler import log_error
+from utils.error_handler import log_error, log_warning
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class ImagePromptChain(Runnable):
@@ -106,8 +110,8 @@ class ImagePromptChain(Runnable):
             story_data = input_data.get("story_data", {})
             
             # Debug: Print the story_data structure
-            print(f"Debug - story_data keys: {list(story_data.keys())}")
-            print(f"Debug - story_data type: {type(story_data)}")
+            logger.debug(f"Debug - story_data keys: {list(story_data.keys())}")
+            logger.debug(f"Debug - story_data type: {type(story_data)}")
             
             # Extract components with better error handling
             story = story_data.get("story", "")
@@ -115,17 +119,17 @@ class ImagePromptChain(Runnable):
             background_desc = story_data.get("background_description", "")
             
             if not story:
-                print("Warning: No story found in story_data")
+                log_warning("Warning: No story found in story_data")
             if not character_desc:
-                print("Warning: No character_description found in story_data")
+                log_warning("Warning: No character_description found in story_data")
             if not background_desc:
-                print("Warning: No background_description found in story_data")
+                log_warning("Warning: No background_description found in story_data")
             
-            print("Generating optimized image prompts...")
+            logger.info("Generating optimized image prompts...")
             
             # Detect style from story
             detected_style = self._detect_style(story)
-            print(f"Detected style: {detected_style}")
+            logger.info(f"Detected style: {detected_style}")
             
             # Generate enhanced prompts
             character_prompt = self._enhance_character_prompt(character_desc, detected_style)
@@ -139,9 +143,9 @@ class ImagePromptChain(Runnable):
                 "original_background_desc": background_desc
             }
             
-            print("Image prompts generated successfully!")
-            print(f"Character prompt: {character_prompt[:100]}...")
-            print(f"Background prompt: {background_prompt[:100]}...")
+            logger.info("Image prompts generated successfully!")
+            logger.info(f"Character prompt: {character_prompt[:100]}...")
+            logger.info(f"Background prompt: {background_prompt[:100]}...")
             
             return {"image_prompts": result}
             
@@ -149,8 +153,8 @@ class ImagePromptChain(Runnable):
             error_msg = f"Image prompt generation failed: {e}"
             log_error(error_msg)
             # Print more debug info
-            print(f"Debug - Exception details: {e}")
-            print(f"Debug - input_data: {input_data}")
+            logger.debug(f"Debug - Exception details: {e}")
+            logger.debug(f"Debug - input_data: {input_data}")
             raise Exception(error_msg)
 
 

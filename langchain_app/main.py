@@ -1,58 +1,93 @@
 """
-Main entry point for StorySmith AI LangChain application
+Enhanced Main Entry Point for StorySmith AI
+Integrates story generation with image generation in a complete LangChain pipeline
 """
 
 import os
 import sys
 import argparse
+import logging
 from datetime import datetime
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from chains.story_chain import create_story_chain
-from utils.error_handler import log_info, log_error, StorySmithError
-from config import OUTPUT_DIR
+from langchain_app.chains.story_chain import create_enhanced_story_chain, create_simple_story_chain
+from utils.error_handler import log_info, log_error, log_warning, StorySmithError
+from config import OUTPUT_DIR, USE_LOCAL_MODELS
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
-def generate_simple_story(topic: str) -> dict:
-    """Simple story generation - just text, no images"""
+def display_story_result(result: dict):
+    """Display the generated story and image information in a nice format"""
+    logger.info("\n" + "="*70)
+    logger.info("🎉 STORYSMITH AI - COMPLETE STORY GENERATION 🎉")
+    logger.info("="*70)
+    
+    logger.info(f"📝 Topic: {result['topic']}")
+    logger.info(f"🕒 Generated: {result['timestamp']}")
+    if result.get('detected_style'):
+        logger.info(f"🎭 Style: {result['detected_style']}")
+    
+    logger.info("\n" + "📖 STORY:")
+    logger.info("-" * 40)
+    logger.info(result['story'])
+    
+    logger.info("\n" + "👤 CHARACTER DESCRIPTION:")
+    logger.info("-" * 40)
+    logger.info(result['character_description'])
+    
+    logger.info("\n" + "🏞️ BACKGROUND DESCRIPTION:")
+    logger.info("-" * 40)
+    logger.info(result['background_description'])
+    
+    if result.get('character_prompt'):
+        logger.info("\n" + "🎨 IMAGE PROMPTS:")
+        logger.info("-" * 40)
+        logger.info(f"Character: {result['character_prompt']}")
+        logger.info(f"Background: {result['background_prompt']}")
+    
+    if result.get('final_image_path'):
+        logger.info("\n" + "🖼️ GENERATED IMAGES:")
+        logger.info("-" * 40)
+        logger.info(f"Character Image: {result['character_image_path']}")
+        logger.info(f"Background Image: {result['background_image_path']}")
+        logger.info(f"Final Merged Image: {result['final_image_path']}")
+    
+    logger.info("\n" + "="*70)
+
+
+def generate_story_with_images(topic: str) -> dict:
+    """Generate story with complete image visualization"""
     try:
-        log_info(f"Starting story generation for topic: {topic}")
+        log_info(f"Starting complete story generation with images for: {topic}")
         
-        print("� Generating story content...")
+        # Create the enhanced chain
+        enhanced_chain = create_enhanced_story_chain(generate_images=True)
         
-        # Use our working functional story chain
-        story_chain = create_story_chain()
-        story_result = story_chain.invoke({"topic": topic})
-        story_data = story_result["result"]
+        # Run the complete pipeline
+        result = enhanced_chain.invoke({"topic": topic})
         
-        # Display results
-        print("\n" + "="*50)
-        print("GENERATED STORY")
-        print("="*50)
-        print(story_data["story"])
-        print("\n" + "="*50)
-        print("CHARACTER DESCRIPTION")
-        print("="*50)
-        print(story_data["character_description"])
-        print("\n" + "="*50)
-        print("BACKGROUND DESCRIPTION")
-        print("="*50)
-        print(story_data["background_description"])
-        print("="*50 + "\n")
+        return result
         
-        # Prepare final result
-        from datetime import datetime
-        result = {
-            "topic": topic,
-            "story": story_data["story"],
-            "character_description": story_data["character_description"],
-            "background_description": story_data["background_description"],
-            "timestamp": datetime.now().isoformat()
-        }
+    except Exception as e:
+        error_msg = f"Enhanced story generation failed: {e}"
+        log_error(error_msg)
+        raise StorySmithError(error_msg)
+
+
+def generate_story_only(topic: str) -> dict:
+    """Generate story content only, no images"""
+    try:
+        log_info(f"Starting story-only generation for: {topic}")
         
-        print(f"\n🎉 STORY GENERATION COMPLETED! 🎉")
+        # Create simple chain without images
+        simple_chain = create_simple_story_chain()
+        
+        # Run story generation only
+        result = simple_chain.invoke({"topic": topic})
         
         return result
         
@@ -63,54 +98,84 @@ def generate_simple_story(topic: str) -> dict:
 
 
 def main():
-    """Main function with simplified interface"""
-    parser = argparse.ArgumentParser(description="StorySmith AI - Generate creative stories")
+    """Enhanced main function with story and image generation modes"""
+    parser = argparse.ArgumentParser(
+        description="StorySmith AI - Enhanced Story Generation with Images",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python enhanced_main.py "A magical adventure"           # Full generation
+  python enhanced_main.py --story-only "Space adventure"  # Story only, no images
+  python enhanced_main.py --test                          # Test mode
+        """
+    )
+    
     parser.add_argument("topic", nargs="?", help="The topic for story generation")
-    parser.add_argument("--test", action="store_true", help="Run in test mode with predefined topic")
+    parser.add_argument("--story-only", action="store_true", 
+                       help="Generate story content only (faster, no images)")
+    parser.add_argument("--test", action="store_true", 
+                       help="Run test with predefined topic")
     
     args = parser.parse_args()
     
     try:
+        # Determine topic
         if args.test:
-            topic = "A magical adventure in an enchanted forest"
-            print(f"Running in test mode with topic: {topic}")
+            topic = "A magical adventure in an enchanted forest with dragons"
+            logger.info(f"🧪 Running in test mode with topic: {topic}")
         elif args.topic:
             topic = args.topic
         else:
             # Interactive mode
-            print("Welcome to StorySmith AI!")
-            print("Generate creative stories with character and background descriptions.")
-            print("-" * 60)
+            logger.info("🎭 Welcome to StorySmith AI - Enhanced Edition!")
+            logger.info("Generate creative stories with optional image visualization.")
+            logger.info("-" * 60)
             topic = input("Enter a topic for your story: ").strip()
             
             if not topic:
-                print("No topic provided. Exiting.")
+                logger.warning("No topic provided. Exiting.")
                 return
         
-        # Generate the story (simple approach)
-        result = generate_simple_story(topic)
+        # Check if image generation is available
+        if not USE_LOCAL_MODELS and not args.story_only:
+            log_warning("⚠️  Note: Local models disabled. Consider using --story-only for faster generation.")
+            user_choice = input("Continue with full generation? (y/n): ").strip().lower()
+            if user_choice != 'y':
+                args.story_only = True
         
-        # Save result summary
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        summary_file = os.path.join(OUTPUT_DIR, f"story_summary_{timestamp}.txt")
+        # Generate based on mode
+        if args.story_only:
+            logger.info("\n📝 Generating story content only...")
+            result = generate_story_only(topic)
+        else:
+            logger.info("\n🎨 Generating complete story with images...")
+            result = generate_story_with_images(topic)
         
-        with open(summary_file, "w", encoding="utf-8") as f:
-            f.write(f"StorySmith AI - Story Generation Summary\n")
-            f.write(f"Generated on: {result['timestamp']}\n")
-            f.write(f"Topic: {result['topic']}\n\n")
-            f.write(f"STORY:\n{result['story']}\n\n")
-            f.write(f"CHARACTER:\n{result['character_description']}\n\n")
-            f.write(f"BACKGROUND:\n{result['background_description']}\n")
+        # Display results
+        display_story_result(result)
         
-        print(f"\nSummary saved to: {summary_file}")
+        # Save summary (if not already saved by enhanced chain)
+        if args.story_only:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            summary_file = os.path.join(OUTPUT_DIR, f"story_only_summary_{timestamp}.txt")
+            
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write(f"StorySmith AI - Story Only Summary\n")
+                f.write(f"Generated on: {result['timestamp']}\n")
+                f.write(f"Topic: {result['topic']}\n\n")
+                f.write(f"STORY:\n{result['story']}\n\n")
+                f.write(f"CHARACTER:\n{result['character_description']}\n\n")
+                f.write(f"BACKGROUND:\n{result['background_description']}\n")
+            
+            logger.info(f"\n📄 Summary saved to: {summary_file}")
         
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
+        log_warning("\n🛑 Operation cancelled by user.")
     except StorySmithError as e:
-        print(f"StorySmith Error: {e}")
+        log_error(f"\n❌ StorySmith Error: {e}")
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        log_error("Unexpected error in main", e)
+        log_error(f"\n💥 Unexpected error: {e}")
+        log_error("Unexpected error in enhanced main", e)
 
 
 if __name__ == "__main__":

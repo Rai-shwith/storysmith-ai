@@ -7,6 +7,7 @@ import os
 import sys
 import requests
 import time
+import logging
 from PIL import Image, ImageDraw
 from typing import Tuple, Optional
 from io import BytesIO
@@ -27,7 +28,10 @@ from config import (
     TEMP_DIR,
     USE_LOCAL_MODELS
 )
-from utils.error_handler import log_error, log_info, ImageProcessingError
+from utils.error_handler import log_error, log_info, log_warning, ImageProcessingError
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 def generate_image_from_prompt(prompt: str, filename: str) -> str:
@@ -49,11 +53,11 @@ def _generate_image_local(prompt: str, filename: str) -> str:
         from diffusers import StableDiffusionXLPipeline
         import torch
         
-        print(f"🎨 Loading local image model: {IMAGE_GENERATION_MODEL}")
+        logger.info(f"🎨 Loading local image model: {IMAGE_GENERATION_MODEL}")
         
         # Check if CUDA is available
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {device}")
+        logger.info(f"Using device: {device}")
         
         # Load the SDXL pipeline
         pipe = StableDiffusionXLPipeline.from_pretrained(
@@ -127,12 +131,12 @@ def _generate_image_api(prompt: str, filename: str) -> str:
                         estimated_time = error_data.get("estimated_time", 60)
                     except:
                         pass
-                    print(f"Model is loading, waiting {estimated_time} seconds...")
+                    log_warning(f"Model is loading, waiting {estimated_time} seconds...")
                     time.sleep(estimated_time)
                     continue
                     
                 elif response.status_code == 429:
-                    print("Rate limit reached. Please wait and try again later.")
+                    log_warning("Rate limit reached. Please wait and try again later.")
                     raise Exception("Rate limit reached")
                     
                 elif response.status_code == 200:
@@ -307,9 +311,9 @@ def test_image_generation():
         test_background_prompt = "A mystical forest at dawn, sunlight filtering through trees, magical atmosphere"
         
         result = create_story_visualization(test_character_prompt, test_background_prompt, "test")
-        print(f"Test completed successfully! Output: {result}")
+        logger.info(f"Test completed successfully! Output: {result}")
         return result
         
     except Exception as e:
-        print(f"Test failed: {e}")
+        log_error(f"Test failed: {e}")
         return None

@@ -1,283 +1,200 @@
 """
-Story Chain - Functional approach for generating story, character, and background descriptions
-Uses LangChain's latest patterns with pipe operations and functional composition
+Enhanced Story Chain with Integrated Image Generation
+Combines story generation, prompt optimization, and image generation in a single LangChain pipeline
 """
 
 import os
 import sys
-import re
-import torch
+import time
+import logging
 from typing import Dict, Any
+from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # LangChain imports
-from langchain_huggingface import HuggingFacePipeline
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from huggingface_hub import InferenceClient
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from langchain_core.runnables import Runnable
 
-# Config and utilities
-from config import (
-    HUGGINGFACE_API_TOKEN,
-    TEXT_GENERATION_MODEL,
-    STORY_PROMPT_TEMPLATE,
-    CHARACTER_PROMPT_TEMPLATE,
-    BACKGROUND_PROMPT_TEMPLATE,
-    USE_LOCAL_MODELS,
-    API_TIMEOUT,
-    MAX_RETRIES
-)
-from utils.error_handler import log_error
+# Import existing components
+from chains.story_chain import create_story_chain
+from chains.image_prompt_chain import create_image_prompt_chain
+from utils.image_merge import generate_image_from_prompt, merge_character_and_background
+from utils.error_handler import log_info, log_error, log_warning, StorySmithError
+from config import OUTPUT_DIR
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
-def clean_repetitive_text(text: str) -> str:
-    """Remove repetitive sentences and clean up the text."""
-    sentences = text.split('. ')
-    cleaned_sentences = []
-    seen_sentences = set()
-
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if sentence and sentence.lower() not in seen_sentences:
-            seen_sentences.add(sentence.lower())
-            cleaned_sentences.append(sentence)
-
-    result = '. '.join(cleaned_sentences)
-    if result and not result.endswith('.'):
-        result += '.'
-
-    return result
-
-
-def enforce_png_format(text: str) -> str:
-    """Ensure text ends with PNG format specification."""
-    text = text.strip()
-    
-    # Remove description tags that sometimes appear
-    text = re.sub(r'</?description[^>]*>', '', text, flags=re.IGNORECASE)
-    
-    if not text.lower().endswith("transparent background, png format."):
-        text = re.sub(r'\.*$', '', text)  # remove trailing dots
-        text += ". transparent background, PNG format"
-    return text
-
-
-def extract_clean_response(text: str) -> str:
-    """Extract only the model's response, removing all instruction artifacts."""
-    # First, try to find the assistant's response section
-    if "<|assistant|>" in text:
-        # Split and get everything after the assistant marker
-        parts = text.split("<|assistant|>")
-        if len(parts) > 1:
-            response = parts[-1]
-            # Remove end markers
-            response = response.replace("<|end|>", "").strip()
-            return response
-
-    # Fallback: use the original cleaning
-    return clean_model_output(text)
-
-
-def clean_model_output(text: str) -> str:
-    """Clean the output from instruction-following models."""
-    # Remove instruction tags and clean up
-    text = text.replace("<|user|>", "").replace("<|assistant|>", "").replace("<|end|>", "")
-    text = text.replace("<s>", "").replace("</s>", "")
-    text = text.replace("[INST]", "").replace("[/INST]", "")
-
-    # Find the actual response (usually after the instruction)
-    lines = text.split('\n')
-    clean_lines = []
-    for line in lines:
-        line = line.strip()
-        if line and not line.startswith(('<', '[', 'Based on', 'Write a', 'Describe', 'Provide', 'Create a', 'Story:', 'Focus on')):
-            clean_lines.append(line)
-
-    if clean_lines:
-        result = ' '.join(clean_lines)
-        # Remove any instruction artifacts that might remain
-        result = re.sub(r'(Create a detailed|Write 4-5|Include:|Based on this).*?(?=\w)', '', result)
-        return result.strip()
-    return text.strip()
-
-
-def load_local_llm():
-    """Load local LLM using HuggingFacePipeline."""
-    try:
-        print(f"🔥 Loading local model: {TEXT_GENERATION_MODEL}")
-        
-        # Check if CUDA is available and set device
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {device}")
-
-        tokenizer = AutoTokenizer.from_pretrained(
-            TEXT_GENERATION_MODEL,
-            trust_remote_code=True
-        )
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-
-        model = AutoModelForCausalLM.from_pretrained(
-            TEXT_GENERATION_MODEL,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-            device_map="auto",
-            trust_remote_code=True,
-            attn_implementation="eager"  # Use eager attention to avoid cache issues
-        )
-
-        pipe = pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            max_new_tokens=400,  # Increased to prevent truncation
-            min_new_tokens=60,
-            repetition_penalty=1.1,
-            do_sample=True,
-            temperature=0.4,
-            top_p=0.9,
-            top_k=50,
-            pad_token_id=tokenizer.eos_token_id,
-            use_cache=False  # Disable caching to avoid the seen_tokens issue
-        )
-
-        return HuggingFacePipeline(pipeline=pipe)
-    
-    except Exception as e:
-        log_error(f"Failed to load local model: {e}")
-        raise Exception(f"Local model loading failed: {e}")
-
-
-def create_api_llm():
-    """Create LLM wrapper for HuggingFace Inference API."""
-    
-    class HuggingFaceAPILLM:
-        """Simple LLM wrapper for HuggingFace Inference API."""
-        
-        def __init__(self):
-            if not HUGGINGFACE_API_TOKEN:
-                raise Exception("HUGGINGFACE_API_TOKEN not found in environment variables")
-            self.client = InferenceClient(token=HUGGINGFACE_API_TOKEN)
-        
-        def invoke(self, prompt: str) -> str:
-            """Call HuggingFace Inference API."""
-            try:
-                response = self.client.text_generation(
-                    prompt=prompt,
-                    model=TEXT_GENERATION_MODEL,
-                    max_new_tokens=400,
-                    temperature=0.4,
-                    top_p=0.9,
-                    do_sample=True,
-                    return_full_text=False
-                )
-                return response.strip()
-            except Exception as e:
-                log_error(f"HuggingFace API call failed: {e}")
-                raise Exception(f"API call failed: {e}")
-    
-    return HuggingFaceAPILLM()
-
-
-def get_llm():
-    """Get LLM based on USE_LOCAL_MODELS configuration."""
-    if USE_LOCAL_MODELS:
-        return load_local_llm()
-    else:
-        return create_api_llm()
-
-
-def generate_story_bundle(user_prompt: str) -> Dict[str, str]:
+class EnhancedStoryVisualizationChain(Runnable):
     """
-    Generate story, character, and background descriptions.
+    Complete LangChain pipeline that:
+    1. Generates story content (story, character desc, background desc)
+    2. Optimizes descriptions into image prompts
+    3. Generates character and background images
+    4. Merges images into final visualization
+    5. Returns complete story package with images
+    """
     
-    Args:
-        user_prompt: The topic or prompt for story generation
-        
-    Returns:
-        Dictionary with 'story', 'character_description', and 'background_description' keys
-    """
-    try:
-        print(f"🔗 Generating story bundle for: {user_prompt}")
-        print(f"📍 Using {'local models' if USE_LOCAL_MODELS else 'API calls'}")
-        
-        # Get LLM instance
-        llm = get_llm()
-        
-        # Create prompt templates
-        story_prompt = PromptTemplate.from_template(STORY_PROMPT_TEMPLATE)
-        character_prompt = PromptTemplate.from_template(CHARACTER_PROMPT_TEMPLATE)
-        background_prompt = PromptTemplate.from_template(BACKGROUND_PROMPT_TEMPLATE)
-        
-        # Build pipeline chains
-        story_chain = story_prompt | llm | StrOutputParser()
-        character_chain = character_prompt | llm | StrOutputParser()
-        background_chain = background_prompt | llm | StrOutputParser()
-        
-        print("📝 Generating story...")
-        # First, generate the story
-        story_text = story_chain.invoke({"topic": user_prompt})
-        
-        print("👤 Generating character description...")
-        # Then generate character and background descriptions based on the story
-        character_text = character_chain.invoke({"story": story_text})
-        
-        print("🌄 Generating background description...")
-        background_text = background_chain.invoke({"story": story_text})
-        
-        # Clean and format outputs
-        result = {
-            "story": clean_repetitive_text(extract_clean_response(story_text.strip())),
-            "character_description": enforce_png_format(clean_repetitive_text(extract_clean_response(character_text.strip()))),
-            "background_description": clean_repetitive_text(extract_clean_response(background_text.strip()))
-        }
-        
-        print("✅ Story bundle generation completed successfully!")
-        return result
-        
-    except Exception as e:
-        error_msg = f"Story bundle generation failed: {e}"
-        log_error(error_msg)
-        raise Exception(error_msg)
-
-
-def create_story_chain():
-    """
-    Factory function for compatibility with existing code.
-    """
-    def invoke(input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Invoke the story generation with the expected input/output format."""
+    def __init__(self, generate_images: bool = True):
+        super().__init__()
+        self.generate_images = generate_images
+        self.story_chain = create_story_chain()
+        self.prompt_chain = create_image_prompt_chain()
+    
+    def invoke(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Complete story visualization pipeline"""
         try:
             topic = input_data.get("topic", "")
-            if not topic:
-                raise Exception("No topic provided")
+            log_info(f"Starting enhanced story visualization for: {topic}")
             
-            # Generate story bundle
-            result = generate_story_bundle(topic)
+            logger.info("🎯 Starting Enhanced Story Generation Pipeline...")
+            logger.info("=" * 60)
             
-            # Return in the expected format for compatibility
-            return {"result": result}
+            # Step 1: Generate Story Content
+            logger.info("📝 Step 1: Generating story content...")
+            story_result = self.story_chain.invoke({"topic": topic})
+            story_data = story_result["result"]
+            
+            logger.info("✅ Story content generated!")
+            logger.info(f"   📖 Story: {len(story_data['story'])} characters")
+            logger.info(f"   👤 Character: {story_data['character_description'][:50]}...")
+            logger.info(f"   🏞️  Background: {story_data['background_description'][:50]}...")
+            
+            result = {
+                "topic": topic,
+                "timestamp": datetime.now().isoformat(),
+                "story": story_data["story"],
+                "character_description": story_data["character_description"],
+                "background_description": story_data["background_description"],
+                "character_image_path": None,
+                "background_image_path": None,
+                "final_image_path": None,
+                "character_prompt": None,
+                "background_prompt": None,
+                "detected_style": None
+            }
+            
+            if not self.generate_images:
+                log_warning("⏭️  Image generation skipped (generate_images=False)")
+                return result
+            
+            # Step 2: Optimize Image Prompts
+            logger.info("\n🎨 Step 2: Optimizing image prompts...")
+            prompt_result = self.prompt_chain.invoke({"story_data": story_data})
+            image_prompts = prompt_result["image_prompts"]
+            
+            result["character_prompt"] = image_prompts["character_prompt"]
+            result["background_prompt"] = image_prompts["background_prompt"]
+            result["detected_style"] = image_prompts["detected_style"]
+            
+            logger.info(f"✅ Image prompts optimized!")
+            logger.info(f"   🎭 Style detected: {image_prompts['detected_style']}")
+            logger.info(f"   👤 Character prompt: {image_prompts['character_prompt'][:60]}...")
+            logger.info(f"   🏞️  Background prompt: {image_prompts['background_prompt'][:60]}...")
+            
+            # Step 3: Generate Images
+            logger.info("\n🖼️  Step 3: Generating images...")
+            timestamp = int(time.time())
+            
+            # Generate character image
+            logger.info("   📷 Generating character image...")
+            character_filename = f"character_{timestamp}.png"
+            character_path = generate_image_from_prompt(
+                image_prompts["character_prompt"], 
+                character_filename
+            )
+            result["character_image_path"] = character_path
+            logger.info(f"   ✅ Character image: {character_path}")
+            
+            # Generate background image
+            logger.info("   📷 Generating background image...")
+            background_filename = f"background_{timestamp}.png"
+            background_path = generate_image_from_prompt(
+                image_prompts["background_prompt"], 
+                background_filename
+            )
+            result["background_image_path"] = background_path
+            logger.info(f"   ✅ Background image: {background_path}")
+            
+            # Step 4: Merge Images
+            logger.info("\n🔗 Step 4: Merging images...")
+            story_title = topic.replace(" ", "_").lower()[:20]  # Truncate for filename
+            output_filename = f"{story_title}_{timestamp}_final.jpg"
+            
+            final_image_path = merge_character_and_background(
+                character_path,
+                background_path,
+                output_filename
+            )
+            result["final_image_path"] = final_image_path
+            logger.info(f"   ✅ Final image: {final_image_path}")
+            
+            # Step 5: Save Summary
+            self._save_story_summary(result)
+            
+            logger.info("\n🎉 COMPLETE STORY VISUALIZATION PIPELINE FINISHED! 🎉")
+            logger.info("=" * 60)
+            logger.info(f"📁 Final image: {final_image_path}")
+            logger.info(f"📝 Story summary saved")
+            logger.info("=" * 60)
+            
+            return result
             
         except Exception as e:
-            error_msg = f"Story generation failed: {e}"
+            error_msg = f"Enhanced story visualization failed: {e}"
             log_error(error_msg)
-            raise Exception(error_msg)
+            raise StorySmithError(error_msg)
     
-    # Return an object that has an invoke method
-    class StoryChainCompat:
-        def invoke(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-            return invoke(input_data)
-    
-    return StoryChainCompat()
+    def _save_story_summary(self, result: Dict[str, Any]):
+        """Save a comprehensive summary of the generated story and images"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            summary_file = os.path.join(OUTPUT_DIR, f"enhanced_story_summary_{timestamp}.txt")
+            
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write("StorySmith AI - Enhanced Story Generation Summary\n")
+                f.write("=" * 60 + "\n")
+                f.write(f"Generated on: {result['timestamp']}\n")
+                f.write(f"Topic: {result['topic']}\n")
+                f.write(f"Detected Style: {result.get('detected_style', 'N/A')}\n\n")
+                
+                f.write("STORY:\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"{result['story']}\n\n")
+                
+                f.write("CHARACTER DESCRIPTION:\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"{result['character_description']}\n\n")
+                
+                f.write("BACKGROUND DESCRIPTION:\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"{result['background_description']}\n\n")
+                
+                if result.get('character_prompt'):
+                    f.write("IMAGE PROMPTS:\n")
+                    f.write("-" * 30 + "\n")
+                    f.write(f"Character: {result['character_prompt']}\n\n")
+                    f.write(f"Background: {result['background_prompt']}\n\n")
+                
+                if result.get('final_image_path'):
+                    f.write("GENERATED FILES:\n")
+                    f.write("-" * 30 + "\n")
+                    f.write(f"Character Image: {result.get('character_image_path', 'N/A')}\n")
+                    f.write(f"Background Image: {result.get('background_image_path', 'N/A')}\n")
+                    f.write(f"Final Merged Image: {result['final_image_path']}\n")
+            
+            log_info(f"Story summary saved: {summary_file}")
+            
+        except Exception as e:
+            log_error("Failed to save story summary", e)
+
+def create_enhanced_story_chain(generate_images: bool = True) -> EnhancedStoryVisualizationChain:
+    """Factory function to create the enhanced story visualization chain"""
+    return EnhancedStoryVisualizationChain(generate_images=generate_images)
 
 
-# Main function for direct usage
-if __name__ == "__main__":
-    # Example usage
-    result = generate_story_bundle("a friendly robot")
-    print("\n📖 Generated Story Bundle:")
-    print(f"Story: {result['story']}")
-    print(f"Character: {result['character_description']}")
-    print(f"Background: {result['background_description']}")
+def create_simple_story_chain() -> EnhancedStoryVisualizationChain:
+    """Create a chain that only generates story content, no images"""
+    return EnhancedStoryVisualizationChain(generate_images=False)
