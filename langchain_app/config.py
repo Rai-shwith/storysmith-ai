@@ -55,22 +55,71 @@ MAX_RETRIES = 3
 RATE_LIMIT_WAIT = 2  # seconds between requests
 
 # Story Generation Prompts - Optimized for Phi-3-mini instruction following
-STORY_PROMPT_TEMPLATE = """
-<|system|>You are a creative storyteller who writes engaging and imaginative stories.<|end|>
-<|user|>Write a complete short story about: {topic}
-
-The story should be engaging, creative, and approximately 200-300 words. Include interesting characters, a clear beginning, middle, and end.<|end|>
+STORY_PROMPT_TEMPLATE = """<|user|>
+Write a creative short story about: {topic}
+Requirements:
+- 150-200 words
+- Complete narrative with beginning, middle, end
+- Vivid descriptions and unique characters
+- Action and dialogue
+<|end|>
 <|assistant|>
 """
 
-# Image Prompt Templates
-CHARACTER_PROMPT_TEMPLATE = """
+# Character Description Prompt
+CHARACTER_PROMPT_TEMPLATE = """<|user|>
+You are an AI prompt generator for image models.
+From this story:
+
+{story}
+
+Generate ONLY a short, visual description of the MAIN CHARACTER.
+Strict rules:
+1. Focus only on visible physical traits, clothing, accessories, body language, facial expression.
+2. No background elements.
+3. No camera settings or photography jargon.
+4. Write in ONE paragraph under 80 words.
+5. End EXACTLY with: 'transparent background, PNG format'.
+6. Do not add anything else.
+
+OUTPUT FORMAT:
+<description sentence(s)>. transparent background, PNG format
+<|end|>
+<|assistant|>
+"""
+
+# Background Description Prompt
+BACKGROUND_PROMPT_TEMPLATE = """<|user|>
+You are an AI prompt generator for background images.
+Based on this story:
+
+{story}
+
+Create a concise, highly visual prompt for the SETTING of the story.
+Guidelines:
+- Describe only the environment and scenery, without including any characters or creatures.
+- Include specific location details, architecture, and landmarks relevant to the story.
+- Indicate time of day, season, and weather.
+- Convey atmosphere and mood visually (e.g., lighting, color tone) rather than poetically.
+- Ensure composition is wide enough to place a character in the scene later.
+- Keep it under 3 sentences.
+- End with the desired style (realistic, cinematic, anime, etc.).
+- Background does not need to be transparent.
+
+Final format:
+A detailed image prompt, ending with style keywords.
+<|end|>
+<|assistant|>
+"""
+
+# Image Generation Prompt Templates (for SDXL/image models)
+CHARACTER_IMAGE_PROMPT_TEMPLATE = """
 {character_description}, full body shot, isolated on pure white background, 
 png style, no background, clean edges, high quality, detailed, 
 {style_modifier}
 """
 
-BACKGROUND_PROMPT_TEMPLATE = """
+BACKGROUND_IMAGE_PROMPT_TEMPLATE = """
 {background_description}, detailed environment, 
 atmospheric lighting, high quality, cinematic, 
 {style_modifier}

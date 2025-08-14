@@ -1,262 +1,279 @@
 """
-Story Chain - Generates story, character, and background descriptions
+Story Chain - Functional approach for generating story, character, and background descriptions
+Uses LangChain's latest patterns with pipe operations and functional composition
 """
 
 import os
 import sys
 import re
-import requests
-import time
+import torch
 from typing import Dict, Any
-from huggingface_hub import InferenceClient
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# LangChain - Latest lightweight modular architecture
-from langchain_core.runnables import Runnable
-from langchain_core.output_parsers import BaseOutputParser
+# LangChain imports
+from langchain_huggingface import HuggingFacePipeline
 from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from huggingface_hub import InferenceClient
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
+# Config and utilities
 from config import (
-    HUGGINGFACE_API_TOKEN, 
-    HUGGINGFACE_API_URL, 
+    HUGGINGFACE_API_TOKEN,
     TEXT_GENERATION_MODEL,
     STORY_PROMPT_TEMPLATE,
+    CHARACTER_PROMPT_TEMPLATE,
+    BACKGROUND_PROMPT_TEMPLATE,
+    USE_LOCAL_MODELS,
     API_TIMEOUT,
-    MAX_RETRIES,
-    RATE_LIMIT_WAIT,
-    USE_LOCAL_MODELS
+    MAX_RETRIES
 )
-from utils.error_handler import handle_api_error, log_error
+from utils.error_handler import log_error
 
 
-class StoryOutputParser(BaseOutputParser):
-    """Parser to extract story, character, and background from generated text"""
-    
-    def parse(self, text: str) -> Dict[str, str]:
-        """Parse the output text into story components"""
-        try:
-            # For GPT-2, we get continuous text, so we need to split it intelligently
-            result = {
-                "story": "",
-                "character_description": "",
-                "background_description": ""
-            }
-            
-            # Clean up the text
-            text = text.strip()
-            
-            # Remove the prompt part if it's repeated
-            if "STORY:" in text:
-                text = text.split("STORY:", 1)[-1].strip()
-            
-            # Split into sentences and create story components
-            sentences = [s.strip() for s in text.split('.') if s.strip()]
-            
-            if len(sentences) >= 3:
-                # Use first few sentences as the main story
-                story_sentences = sentences[:max(3, len(sentences)//2)]
-                result["story"] = '. '.join(story_sentences) + '.'
-                
-                # Create character description from story context
-                result["character_description"] = "A brave adventurer with mysterious origins, wearing practical clothing suitable for magical quests"
-                
-                # Create background description from story context  
-                result["background_description"] = "An enchanted forest with ancient trees, dappled sunlight, and magical atmosphere"
-            else:
-                # Fallback: use all text as story
-                result["story"] = text
-                result["character_description"] = "A character from the story"
-                result["background_description"] = "A scene from the story"
-            
-            return result
-            
-        except Exception as e:
-            log_error(f"Error parsing story output: {e}")
-            return {
-                "story": text,
-                "character_description": "A character from the story",
-                "background_description": "A scene from the story"
-            }
+def clean_repetitive_text(text: str) -> str:
+    """Remove repetitive sentences and clean up the text."""
+    sentences = text.split('. ')
+    cleaned_sentences = []
+    seen_sentences = set()
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence and sentence.lower() not in seen_sentences:
+            seen_sentences.add(sentence.lower())
+            cleaned_sentences.append(sentence)
+
+    result = '. '.join(cleaned_sentences)
+    if result and not result.endswith('.'):
+        result += '.'
+
+    return result
 
 
-class StoryChain(Runnable):
-    """Modern LangChain Runnable for generating stories with character and background descriptions"""
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.prompt_template = PromptTemplate(
-            input_variables=["topic"],
-            template=STORY_PROMPT_TEMPLATE
-        )
-        self.output_parser = StoryOutputParser()
+def enforce_png_format(text: str) -> str:
+    """Ensure text ends with PNG format specification."""
+    text = text.strip()
+    if not text.lower().endswith("transparent background, png format."):
+        text = re.sub(r'\.*$', '', text)  # remove trailing dots
+        text += ". transparent background, PNG format"
+    return text
+
+
+def extract_clean_response(text: str) -> str:
+    """Extract only the model's response, removing all instruction artifacts."""
+    # First, try to find the assistant's response section
+    if "<|assistant|>" in text:
+        # Split and get everything after the assistant marker
+        parts = text.split("<|assistant|>")
+        if len(parts) > 1:
+            response = parts[-1]
+            # Remove end markers
+            response = response.replace("<|end|>", "").strip()
+            return response
+
+    # Fallback: use the original cleaning
+    return clean_model_output(text)
+
+
+def clean_model_output(text: str) -> str:
+    """Clean the output from instruction-following models."""
+    # Remove instruction tags and clean up
+    text = text.replace("<|user|>", "").replace("<|assistant|>", "").replace("<|end|>", "")
+    text = text.replace("<s>", "").replace("</s>", "")
+    text = text.replace("[INST]", "").replace("[/INST]", "")
+
+    # Find the actual response (usually after the instruction)
+    lines = text.split('\n')
+    clean_lines = []
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith(('<', '[', 'Based on', 'Write a', 'Describe', 'Provide', 'Create a', 'Story:', 'Focus on')):
+            clean_lines.append(line)
+
+    if clean_lines:
+        result = ' '.join(clean_lines)
+        # Remove any instruction artifacts that might remain
+        result = re.sub(r'(Create a detailed|Write 4-5|Include:|Based on this).*?(?=\w)', '', result)
+        return result.strip()
+    return text.strip()
+
+
+def load_local_llm():
+    """Load local LLM using HuggingFacePipeline."""
+    try:
+        print(f"🔥 Loading local model: {TEXT_GENERATION_MODEL}")
         
-        # Use direct API calls instead of deprecated endpoints
-        # This is more reliable and doesn't require heavy dependencies
-        self.llm = None  # Always use direct API approach
+        # Check if CUDA is available and set device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {device}")
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            TEXT_GENERATION_MODEL,
+            trust_remote_code=True
+        )
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        model = AutoModelForCausalLM.from_pretrained(
+            TEXT_GENERATION_MODEL,
+            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+            device_map="auto",
+            trust_remote_code=True,
+            attn_implementation="eager"  # Use eager attention to avoid cache issues
+        )
+
+        pipe = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            max_new_tokens=400,  # Increased to prevent truncation
+            min_new_tokens=60,
+            repetition_penalty=1.1,
+            do_sample=True,
+            temperature=0.4,
+            top_p=0.9,
+            top_k=50,
+            pad_token_id=tokenizer.eos_token_id,
+            use_cache=False  # Disable caching to avoid the seen_tokens issue
+        )
+
+        return HuggingFacePipeline(pipeline=pipe)
     
-    def _call_huggingface_api(self, prompt: str) -> str:
-        """Call Hugging Face API for text generation using modern client"""
-        try:
-            # Initialize the InferenceClient (token is read from environment)
-            client = InferenceClient(token=HUGGINGFACE_API_TOKEN)
-            
-            # Use text generation with the modern client
-            response = client.text_generation(
-                prompt=prompt,
-                model=TEXT_GENERATION_MODEL,
-                max_new_tokens=400,
-                temperature=0.8,
-                top_p=0.9,
-                do_sample=True,
-                return_full_text=False
-            )
-            
-            # The response is a string with the generated text
-            return response.strip()
-            
-        except Exception as e:
-            log_error(f"HuggingFace API call failed: {e}")
-            raise Exception(f"API call failed: {e}")
+    except Exception as e:
+        log_error(f"Failed to load local model: {e}")
+        raise Exception(f"Local model loading failed: {e}")
+
+
+def create_api_llm():
+    """Create LLM wrapper for HuggingFace Inference API."""
     
-    def _call_local_model(self, prompt: str) -> str:
-        """Call local model for text generation using LangChain's HuggingFace integration"""
-        try:
-            from langchain_huggingface import HuggingFacePipeline
-            from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, TextGenerationPipeline
-            import torch
-            
-            print(f"🔥 Loading local model via LangChain: {TEXT_GENERATION_MODEL}")
-            
-            # Check if CUDA is available
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            print(f"Using device: {device}")
-            
-            # Load tokenizer and model
-            tokenizer = AutoTokenizer.from_pretrained(TEXT_GENERATION_MODEL)
-            
-            # Set pad token if not set
-            if tokenizer.pad_token is None:
-                tokenizer.pad_token = tokenizer.eos_token
-            
-            # Load model with compatible settings
-            model = AutoModelForCausalLM.from_pretrained(
-                TEXT_GENERATION_MODEL,
-                torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-                device_map="auto",
-                trust_remote_code=True,
-                attn_implementation="eager"  # Use eager attention
-            )
-            
-            # Try using HuggingFacePipeline directly with model_id instead of pipeline
-            # This approach often bypasses cache issues
+    class HuggingFaceAPILLM:
+        """Simple LLM wrapper for HuggingFace Inference API."""
+        
+        def __init__(self):
+            if not HUGGINGFACE_API_TOKEN:
+                raise Exception("HUGGINGFACE_API_TOKEN not found in environment variables")
+            self.client = InferenceClient(token=HUGGINGFACE_API_TOKEN)
+        
+        def invoke(self, prompt: str) -> str:
+            """Call HuggingFace Inference API."""
             try:
-                llm = HuggingFacePipeline.from_model_id(
-                    model_id=TEXT_GENERATION_MODEL,
-                    task="text-generation",
-                    device_map="auto",
-                    model_kwargs={
-                        "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
-                        "trust_remote_code": True,
-                        "attn_implementation": "eager",
-                        "use_cache": False
-                    },
-                    pipeline_kwargs={
-                        "max_new_tokens": 300,
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                        "do_sample": True,
-                        "return_full_text": False
-                    }
-                )
-                
-                print("✅ Using HuggingFacePipeline.from_model_id")
-                
-            except Exception as e:
-                print(f"⚠️  from_model_id failed ({e}), trying manual pipeline...")
-                
-                # Fallback: Create pipeline manually
-                pipe = pipeline(
-                    "text-generation",
-                    model=model,
-                    tokenizer=tokenizer,
-                    max_new_tokens=300,
-                    temperature=0.7,
+                response = self.client.text_generation(
+                    prompt=prompt,
+                    model=TEXT_GENERATION_MODEL,
+                    max_new_tokens=400,
+                    temperature=0.4,
                     top_p=0.9,
                     do_sample=True,
-                    return_full_text=False,
-                    pad_token_id=tokenizer.eos_token_id,
-                    use_cache=False
+                    return_full_text=False
                 )
-                
-                # Create LangChain LLM from the pipeline
-                llm = HuggingFacePipeline(pipeline=pipe)
-                print("✅ Using manual pipeline creation")
-            
-            # Use LangChain's invoke method
-            response = llm.invoke(prompt)
-            
-            if response and response.strip():
                 return response.strip()
-            else:
-                raise Exception("No text generated from local model")
-                
-        except Exception as e:
-            log_error(f"Local model call failed: {e}")
-            raise Exception(f"Local model call failed: {e}")
+            except Exception as e:
+                log_error(f"HuggingFace API call failed: {e}")
+                raise Exception(f"API call failed: {e}")
     
-    def invoke(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Modern LangChain invoke method for Runnable interface"""
+    return HuggingFaceAPILLM()
+
+
+def get_llm():
+    """Get LLM based on USE_LOCAL_MODELS configuration."""
+    if USE_LOCAL_MODELS:
+        return load_local_llm()
+    else:
+        return create_api_llm()
+
+
+def generate_story_bundle(user_prompt: str) -> Dict[str, str]:
+    """
+    Generate story, character, and background descriptions.
+    
+    Args:
+        user_prompt: The topic or prompt for story generation
+        
+    Returns:
+        Dictionary with 'story', 'character_description', and 'background_description' keys
+    """
+    try:
+        print(f"🔗 Generating story bundle for: {user_prompt}")
+        print(f"📍 Using {'local models' if USE_LOCAL_MODELS else 'API calls'}")
+        
+        # Get LLM instance
+        llm = get_llm()
+        
+        # Create prompt templates
+        story_prompt = PromptTemplate.from_template(STORY_PROMPT_TEMPLATE)
+        character_prompt = PromptTemplate.from_template(CHARACTER_PROMPT_TEMPLATE)
+        background_prompt = PromptTemplate.from_template(BACKGROUND_PROMPT_TEMPLATE)
+        
+        # Build pipeline chains
+        story_chain = story_prompt | llm | StrOutputParser()
+        character_chain = character_prompt | llm | StrOutputParser()
+        background_chain = background_prompt | llm | StrOutputParser()
+        
+        print("📝 Generating story...")
+        # First, generate the story
+        story_text = story_chain.invoke({"topic": user_prompt})
+        
+        print("👤 Generating character description...")
+        # Then generate character and background descriptions based on the story
+        character_text = character_chain.invoke({"story": story_text})
+        
+        print("🌄 Generating background description...")
+        background_text = background_chain.invoke({"story": story_text})
+        
+        # Clean and format outputs
+        result = {
+            "story": clean_repetitive_text(extract_clean_response(story_text.strip())),
+            "character_description": enforce_png_format(clean_repetitive_text(extract_clean_response(character_text.strip()))),
+            "background_description": clean_repetitive_text(extract_clean_response(background_text.strip()))
+        }
+        
+        print("✅ Story bundle generation completed successfully!")
+        return result
+        
+    except Exception as e:
+        error_msg = f"Story bundle generation failed: {e}"
+        log_error(error_msg)
+        raise Exception(error_msg)
+
+
+def create_story_chain():
+    """
+    Factory function for compatibility with existing code.
+    """
+    def invoke(input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Invoke the story generation with the expected input/output format."""
         try:
             topic = input_data.get("topic", "")
             if not topic:
                 raise Exception("No topic provided")
             
-            # Always use direct API calls for better reliability
-            print("🔗 Using direct HuggingFace API calls (lightweight approach)")
-            return self._call_direct_api(input_data)
+            # Generate story bundle
+            result = generate_story_bundle(topic)
+            
+            # Return in the expected format for compatibility
+            return {"result": result}
             
         except Exception as e:
             error_msg = f"Story generation failed: {e}"
             log_error(error_msg)
             raise Exception(error_msg)
     
-    def _call_direct_api(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Fallback method using direct API calls"""
-        try:
-            topic = inputs.get("topic", "")
-            if not topic:
-                raise Exception("No topic provided")
-            
-            # Format the prompt using LangChain's PromptTemplate
-            prompt = self.prompt_template.format(topic=topic)
-            
-            print(f"Generating story for topic: {topic}")
-            
-            # Choose between local and API based on configuration
-            if USE_LOCAL_MODELS:
-                generated_text = self._call_local_model(prompt)
-            else:
-                if not HUGGINGFACE_API_TOKEN:
-                    raise Exception("HUGGINGFACE_API_TOKEN not found in environment variables")
-                generated_text = self._call_huggingface_api(prompt)
-            
-            if not generated_text:
-                raise Exception("No text generated from model")
-            
-            # Parse the output using LangChain's BaseOutputParser
-            parsed_result = self.output_parser.parse(generated_text)
-            
-            print("Story generation completed successfully!")
-            return {"result": parsed_result}
-            
-        except Exception as e:
-            error_msg = f"Story generation failed: {e}"
-            log_error(error_msg)
-            raise Exception(error_msg)
+    # Return an object that has an invoke method
+    class StoryChainCompat:
+        def invoke(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+            return invoke(input_data)
+    
+    return StoryChainCompat()
 
 
-def create_story_chain() -> StoryChain:
-    """Factory function to create a StoryChain instance"""
-    return StoryChain()
+# Main function for direct usage
+if __name__ == "__main__":
+    # Example usage
+    result = generate_story_bundle("a friendly robot")
+    print("\n📖 Generated Story Bundle:")
+    print(f"Story: {result['story']}")
+    print(f"Character: {result['character_description']}")
+    print(f"Background: {result['background_description']}")
