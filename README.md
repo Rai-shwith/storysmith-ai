@@ -16,6 +16,38 @@ StorySmith AI is a comprehensive platform that generates complete story visualiz
 - **🎨 Image Composition**: AI-powered background removal (REMBG) and image merging
 - **🌐 Web Interface**: Professional Django-based user interface with async processing
 
+## 🖼️ **Sample Output Showcase**
+
+### **Example: "Deadpool in a fairy world"**
+
+**📖 Generated Story:**
+In the heart of an enchanted forest where trees whispered secrets to those who dared listen, there lived a peculiar character known as Wade Wilson. But he wasn't your average inhabitant; no, this was Fairytown—a realm untouched by time or sorrow. Here, magic reigned supreme, granting wishes that even mortals could only dream of. Yet amidst all its wonder stood one man whose presence seemed out of place yet oddly fitting - Deadpool.
+
+Deadpool had stumbled upon this mystical land during his quest for eternal life when fate led him through a portal hidden beneath moonlit leaves. With each step into Fairytown, skepticism turned to amazement at how vibrant everything appeared compared to Earth's monochrome reality. The air shimmered like liquid silver around him while talking flowers offered cryptic advice on navigating their whimsical customs.
+
+One day, Queen Celestia summoned Deadpool before her court – wizards donning robes made from spider silk floated above them holding crystal goblets filled with bubbling potions. "We require aid," she declared gravely. A dragon named Smolderwing terrorized nearby villages, leaving nothing but ash behind after every attack. Without hesitation, Deadpool sprang forth onto Cloud Nine, engaging in battle against fiery breath and razor talons until finally emerging victorious. His laughter echoed across valleys as villagers celebrated their newfound hero. And so it happened that Deadpool found himself not just surviving among fairies but thriving within these magical bounds forevermore.
+
+**👤 Character Description:**
+Standing tall with sharp features accentuated by angular lines running down his face, Deadpool sports tattered leather armor adorned with intricate patterns reflective of ancient battles won. Clad head-to-toe except for exposed hands gripping weapons carved from mythril, his eyes glint mischievously over half-moon spectacles perched precariously near his nose. Each movement is calculated, muscles rippling subtly underneath weathered skin hinting at countless skirmishes fought side by side with adversaries both human and supernatural alike.. transparent background, PNG format.
+
+**🏞️ Background Description:**
+[Ancient Enchanted Forest] As twilight embraces the skyline painted with hues of dusky purple and deepening blue, ethereal luminescence filters through towering canopies adorned with bioluminescent flora casting dancing lights below. Majestic ancient oaks stand guard over cobblestone pathways lined with iridescent stones leading towards a grand castle perched high amongst gnarled branches, exuding elegance despite centuries passed. Faint whispers carry along gentle wind currents carrying hints of spring blossoms intermingling with autumn chill, setting the stage for tales both old and timeless — Realistic/Cinematic Style Image Prompt.
+
+### **🎨 Visual Pipeline Results**
+
+| Stage | Image | Description |
+|-------|-------|-------------|
+| **1. Character Generation** | ![Character](langchain_app/outputs/character.jpeg) | SDXL-generated character based on story description |
+| **2. Background Removal** | ![Character No BG](langchain_app/outputs/character_after_rembg.png) | AI-processed character with background removed using REMBG |
+| **3. Background Generation** | ![Background](langchain_app/outputs/background.jpeg) | SDXL-generated enchanted forest background |
+| **4. Final Composition** | ![Final Result](langchain_app/outputs/merged_output.jpg) | Character merged with background for complete visualization |
+
+### **✨ Pipeline Highlights**
+- **🎭 Rich Storytelling**: Complete narrative with character development and world-building
+- **🎨 Precise Image Generation**: SDXL models create high-quality visuals matching story context
+- **🔪 Clean Background Removal**: REMBG technology ensures seamless character extraction
+- **🖼️ Professional Composition**: Intelligent merging creates cohesive final visualizations
+
 ## 🔧 **System Architecture**
 
 ```
@@ -209,6 +241,13 @@ Detailed documentation including:
 - ✅ Performance optimization and debugging
 
 ## 🔧 **Configuration**
+
+### **🤖 AI Models Used**
+
+StorySmith AI leverages state-of-the-art models from HuggingFace:
+
+- **📝 Text Generation**: [`microsoft/Phi-3-mini-4k-instruct`](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) - Primary model for story generation and character descriptions
+- **🎨 Image Generation**: [`stabilityai/stable-diffusion-xl-base-1.0`](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) - High-quality SDXL for character and background image creation
 
 ### **Environment Variables** (Required)
 ```bash
